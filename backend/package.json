@@ -1,0 +1,27 @@
+{
+  "name": "netswitch-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "NetSwitch agent: per-adapter probes, scoring, failover decisions, REST + WebSocket API",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "start:sim": "cross-env NETSWITCH_MODE=sim NETSWITCH_DB=memory node src/server.js",
+    "test": "node --test test/*.test.js",
+    "check": "node scripts/check-windows.js"
+  },
+  "engines": {
+    "node": ">=22.9"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
+}
