@@ -259,4 +259,3 @@ test('12. Explicit memory mode operation', async () => {
 
   await memRepo.close();
 });
-
