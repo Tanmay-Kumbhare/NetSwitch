@@ -64,6 +64,7 @@ export class Agent extends EventEmitter {
     if (!up.length) this.log('[agent] no active adapters found');
     this.state = initialState(up[0]?.id ?? null, up[0]?.id ?? null);
     const { probe } = this.cfg;
+    this.#evaluate();
     this.timers.push(setInterval(() => this.#evaluate(), probe.evalEveryMs));
     this.timers.push(setInterval(() => this.#refreshDiscovery().catch((e) => this.log('[agent] discovery', e.message)), 5000));
     this.timers.push(setInterval(() => this.#persist().catch(() => {}), probe.snapshotEveryMs));
