@@ -80,6 +80,12 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   app.use((err, req, res, next) => { if (!err.status) log('[http]', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'internal error' }); });
 
   // ---- WebSocket: authenticated upgrade, 1 s snapshots, failover events ----
+  // SECURITY & PRODUCTION HARDENING NOTE:
+  // Standard browser WebSocket API does not support custom headers (e.g. 'Authorization: Bearer <tok>'),
+  // so JWT tokens are passed via the '?token=' query parameter during HTTP upgrade.
+  // Query parameters are never logged by the application or included in handshake debug headers.
+  // For production environments exposed beyond localhost, a short-lived single-use ticket pattern
+  // (e.g. POST /api/auth/ws-ticket) is recommended to prevent token leakage in external proxy logs.
   const server = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true });
   server.on('upgrade', (req, socket, head) => {
