@@ -76,4 +76,74 @@ test('manual switch, lock, config edit validation, readings query', async () => 
   assert.equal((await call('GET', '/api/wifi/scan')).body.simulated, true);
 });
 
+test('REST API integration with MySQL persistence', async () => {
+  // Test MySQL API integration against isolated test database
+  const mysqlEnv = {
+    ...process.env,
+    NETSWITCH_MODE: 'sim',
+    NETSWITCH_DB: 'mysql',
+    MYSQL_DATABASE: 'netswitch_phase3_api_test_db',
+  };
+
+  let myCtx;
+  try {
+    myCtx = await createApp({ env: mysqlEnv, log: () => {} });
+    await new Promise((r) => myCtx.server.listen(0, '127.0.0.1', r));
+    const myBase = `http://127.0.0.1:${myCtx.server.address().port}`;
+
+    const myCall = async (method, path, body, tok) => {
+      const res = await fetch(myBase + path, {
+        method,
+        headers: {
+          'content-type': 'application/json',
+          ...(tok ? { authorization: `Bearer ${tok}` } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return { status: res.status, body: await res.json().catch(() => null) };
+    };
+
+    // 1. Health endpoint reports MySQL and dbUp = true
+    const health = await myCall('GET', '/api/health');
+    assert.equal(health.body.ok, true);
+    assert.equal(health.body.db, 'mysql');
+    assert.equal(health.body.dbUp, true);
+
+    // 2. User registration and login in MySQL
+    const reg = await myCall('POST', '/api/auth/register', {
+      email: 'mysql_admin@example.com',
+      name: 'MySQL Admin',
+      password: 'password123',
+    });
+    assert.equal(reg.status, 201);
+    assert.equal(reg.body.user.role, 'admin');
+    const myToken = reg.body.token;
+
+    // 3. Authenticated me endpoint
+    const me = await myCall('GET', '/api/auth/me', null, myToken);
+    assert.equal(me.status, 200);
+    assert.equal(me.body.email, 'mysql_admin@example.com');
+
+    // 4. Readings endpoint returns real SQL query text
+    const readings = await myCall('GET', '/api/readings?interface=wifi&minutes=15', null, myToken);
+    assert.equal(readings.status, 200);
+    assert.ok(readings.body.sql.includes('TIMESTAMPDIFF'));
+    assert.ok(Array.isArray(readings.body.rows));
+  } finally {
+    if (myCtx) await myCtx.close();
+    // Drop the temporary API test database
+    try {
+      const mysql = (await import('mysql2/promise')).default;
+      const conn = await mysql.createConnection({
+        host: process.env.MYSQL_HOST || '127.0.0.1',
+        port: Number(process.env.MYSQL_PORT || 3306),
+        user: process.env.MYSQL_USER || 'root',
+        password: process.env.MYSQL_PASSWORD || '',
+      });
+      await conn.query('DROP DATABASE IF EXISTS `netswitch_phase3_api_test_db`');
+      await conn.end();
+    } catch { /* ignore */ }
+  }
+});
+
 test.after(async () => { ctx?.ws?.close(); await ctx?.close(); });
