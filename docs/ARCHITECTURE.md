@@ -15,10 +15,18 @@ Hard failure (15 lost probes in a row + failed TCP) or adapter down → immediat
 Degradation → candidate leads by ≥20 points for 5 evaluations. Hold-down 30 s. Switch-back to the preferred adapter → +5 for 10 evaluations and score ≥ 60.
 No eligible candidate → NO_INTERNET, never switch. Null score → never switch.
 
-## Switching and verification
-1. Save original metrics to `netswitch-state.json`. 2. Active adapter metric = 5, others = 75 (`Set-NetIPInterface`).
-3. `Find-NetRoute 9.9.9.9` (never pinned) must return the new interface. 4. An unbound TCP connect to 9.9.9.9:443 must succeed from the new adapter's source IP.
-5. Otherwise restore the previous metrics and log a failed event. Restore on exit and on next start. `scripts/restore.ps1` is the manual fallback.
+## Switching, Rollback and Verification
+1. **Hardware Identity Revalidation:** Query `Get-NetAdapter` to verify the target interface still matches its recorded `MacAddress` and `InterfaceGuid` before any mutation.
+2. **State Snapshot & Atomic Persistence:** Save original metrics to `netswitch-state.json` via atomic `.tmp` + rename before executing OS changes.
+3. **Modification & Reverse-Order Rollback:** Active adapter metric = 5, others = 75 (`Set-NetIPInterface`). If any adapter modification fails, `modifiedStack` is reversed and prior interfaces are restored and verified.
+4. **Dual Verification Before Switch Confirmation:** `Find-NetRoute 9.9.9.9` (never pinned) must return the new interface, AND an unbound TCP connect to `9.9.9.9:443` must succeed from the target adapter's source IP.
+5. **Route Ownership & Cleanup Verification:** Pinned `/32` routes are recorded with prefix, index, gateway, and hardware identity. Deletion is independently verified by querying `Get-NetRoute`; state files are preserved on disk if cleanup verification fails.
+6. **Monitor-Only Startup Guard:** When `NETSWITCH_FAILOVER_ENABLED=false`, startup does NOT execute recovery mutations; any stale state file is preserved and exposed as `recoveryPending: true`.
+7. **Emergency Recovery:** `scripts/restore.ps1` provides out-of-band manual restoration for recorded managed interfaces.
+
+## Topology & Upstream Network Redundancy Boundaries
+- **Physical Multi-Interface:** NetSwitch operates across distinct physical laptop adapters (Intel Wi-Fi 6 PCIe vs Remote NDIS USB).
+- **Single Phone Shared Uplink:** When both interfaces connect to the same smartphone (e.g. Moto g64 5G), they share a single cellular uplink. This demonstrates local-link failover and metric prioritization, but does NOT provide independent WAN redundancy. Carrier-level outages represent a common-mode failure. Genuine multi-WAN redundancy requires connecting Wi-Fi to a separate fixed-line ISP.
 
 ## REST (JWT bearer, except health/register/login)
 POST /api/auth/register · POST /api/auth/login · GET /api/auth/me · GET /api/health · GET /api/interfaces · GET /api/interfaces/:key ·

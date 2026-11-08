@@ -40,7 +40,27 @@ export const DEFAULTS = Object.freeze({
   verifyTarget: '9.9.9.9',   // NEVER pinned; used to verify that default traffic really leaves via the new adapter
   activeMetric: 5,
   standbyMetric: 75,
+  // Safety flags: default to FALSE unless explicitly authorized in environment
+  failoverEnabled: false,
+  autoFailoverEnabled: false,
+  probeRoutePinning: false,
 });
+
+/** Explicit and safe boolean environment variable parser */
+export function parseBoolEnv(val, defaultVal = false) {
+  if (val === undefined || val === null || val === '') return defaultVal;
+  const s = String(val).trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes';
+}
+
+/** Parses NetSwitch application-level safety environment variables */
+export function parseAppEnv(env = process.env) {
+  return {
+    failoverEnabled: parseBoolEnv(env?.NETSWITCH_FAILOVER_ENABLED, false),
+    autoFailoverEnabled: parseBoolEnv(env?.NETSWITCH_AUTO_FAILOVER_ENABLED, false),
+    probeRoutePinning: parseBoolEnv(env?.NETSWITCH_PROBE_ROUTE_PINNING, false),
+  };
+}
 
 export function mergeConfig(base, patch) {
   const out = structuredClone(base);

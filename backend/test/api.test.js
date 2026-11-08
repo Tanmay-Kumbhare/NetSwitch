@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { WebSocket } from 'ws';
 import { createApp } from '../src/server.js';
 
-const env = { NETSWITCH_MODE: 'sim', NETSWITCH_DB: 'memory' };
+const env = { NETSWITCH_MODE: 'sim', NETSWITCH_DB: 'memory', NETSWITCH_FAILOVER_ENABLED: 'true', NETSWITCH_AUTO_FAILOVER_ENABLED: 'true' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ctx; let base; let token; let adminToken;
 const call = async (method, path, body, tok = token) => {
@@ -72,7 +72,7 @@ test('manual switch, lock, config edit validation, readings query', async () => 
   const ok = await call('PUT', '/api/config', { decide: { degradeChecks: 4 } }); assert.equal(ok.body.decide.degradeChecks, 4);
   const h = await call('GET', '/api/readings?interface=wifi&minutes=15'); assert.equal(h.status, 200); assert.ok(Array.isArray(h.body.rows));
   assert.equal((await call('GET', '/api/readings?interface=../x')).status, 400);
-  assert.equal((await call('GET', '/api/interfaces/wifi')).body.subnet.network, '10.97.128.0');
+  assert.equal((await call('GET', '/api/interfaces/wifi')).body.subnet.network, '192.168.1.0');
   assert.equal((await call('GET', '/api/wifi/scan')).body.simulated, true);
 });
 

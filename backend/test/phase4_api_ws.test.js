@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { WebSocket } from 'ws';
 import { createApp } from '../src/server.js';
 
-const env = { NETSWITCH_MODE: 'sim', NETSWITCH_DB: 'memory' };
+const env = { NETSWITCH_MODE: 'sim', NETSWITCH_DB: 'memory', NETSWITCH_FAILOVER_ENABLED: 'true' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let ctx;
@@ -101,9 +101,9 @@ test('Phase 4.3: Adapter status & details (/api/interfaces, /api/interfaces/:key
   const detail = await call('GET', '/api/interfaces/wifi', null, viewerToken);
   assert.equal(detail.status, 200);
   assert.equal(detail.body.adapter.id, 'wifi');
-  assert.equal(detail.body.subnet.network, '10.97.128.0');
+  assert.equal(detail.body.subnet.network, '192.168.1.0');
   assert.equal(detail.body.subnet.mask, '255.255.255.0');
-  assert.equal(detail.body.subnet.broadcast, '10.97.128.255');
+  assert.equal(detail.body.subnet.broadcast, '192.168.1.255');
   assert.equal(detail.body.subnet.hosts, 254);
   assert.ok(Array.isArray(detail.body.recent));
 });
