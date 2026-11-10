@@ -10,6 +10,8 @@ const mockCfg = {
   activeMetric: 5,
   standbyMetric: 75,
   verifyTarget: '9.9.9.9',
+  failoverEnabled: true,
+  probeRoutePinning: true,
 };
 
 function createMockEnvironment() {
@@ -17,11 +19,12 @@ function createMockEnvironment() {
   const stateFile = path.join(tmpDir, 'netswitch-state.json');
 
   const ifaces = new Map([
-    [12, { index: 12, metric: 75, autoMetric: false, alias: 'Wi-Fi' }],
-    [17, { index: 17, metric: 5, autoMetric: false, alias: 'Ethernet 2' }],
-    [21, { index: 21, metric: 20, autoMetric: false, alias: 'VMnet1' }],
+    [12, { index: 12, metric: 75, autoMetric: false, alias: 'Wi-Fi', mac: '02-00-00-00-00-01', guid: '{00000000-0000-4000-8000-000000000001}' }],
+    [17, { index: 17, metric: 5, autoMetric: false, alias: 'Ethernet 2', mac: '02-00-00-00-00-02', guid: '{00000000-0000-4000-8000-000000000002}' }],
+    [21, { index: 21, metric: 20, autoMetric: false, alias: 'VMnet1', mac: '00-50-56-C0-00-01', guid: '{VMNET-0001-0000-0000-000000000001}' }],
   ]);
 
+  const routes = new Map();
   const commandLog = [];
   const failureHooks = new Map();
 
@@ -63,16 +66,67 @@ function createMockEnvironment() {
       });
     }
 
+    // Get-NetAdapter
+    const adapterMatch = /Get-NetAdapter -InterfaceIndex (\d+)/.exec(cmd);
+    if (adapterMatch) {
+      const idx = Number(adapterMatch[1]);
+      const iface = ifaces.get(idx);
+      if (!iface) return '';
+      return JSON.stringify({
+        InterfaceIndex: iface.index,
+        MacAddress: iface.mac,
+        InterfaceGuid: iface.guid,
+        PnPDeviceID: iface.pnpId || 'MOCK_DEVICE',
+      });
+    }
+
+    // New-NetRoute
+    const newRouteMatch = /New-NetRoute -DestinationPrefix "([^"]+)" -InterfaceIndex (\d+) -NextHop "([^"]+)"/.exec(cmd);
+    if (newRouteMatch) {
+      const prefix = newRouteMatch[1];
+      const index = Number(newRouteMatch[2]);
+      const nextHop = newRouteMatch[3];
+      const list = routes.get(prefix) || [];
+      list.push({ DestinationPrefix: prefix, InterfaceIndex: index, NextHop: nextHop, PolicyStore: 'ActiveStore' });
+      routes.set(prefix, list);
+      return '';
+    }
+
+    // Remove-NetRoute
+    const removeMatch = /Remove-NetRoute -DestinationPrefix "([^"]+)"(?: -InterfaceIndex (\d+))?/.exec(cmd);
+    if (removeMatch) {
+      const prefix = removeMatch[1];
+      const index = removeMatch[2] ? Number(removeMatch[2]) : null;
+      if (routes.has(prefix)) {
+        if (index !== null) {
+          const rem = routes.get(prefix).filter((r) => r.InterfaceIndex !== index);
+          if (rem.length === 0) routes.delete(prefix);
+          else routes.set(prefix, rem);
+        } else {
+          routes.delete(prefix);
+        }
+      }
+      return '';
+    }
+
+    // Get-NetRoute
+    const getRouteMatch = /Get-NetRoute -DestinationPrefix "([^"]+)"(?: -InterfaceIndex (\d+))?/.exec(cmd);
+    if (getRouteMatch) {
+      const prefix = getRouteMatch[1];
+      const ifIndex = getRouteMatch[2] ? Number(getRouteMatch[2]) : null;
+      let matched = routes.get(prefix) || [];
+      if (ifIndex !== null) {
+        matched = matched.filter((r) => r.InterfaceIndex === ifIndex);
+      }
+      if (matched.length === 0) return '';
+      return JSON.stringify(matched);
+    }
+
     // Find-NetRoute
     if (cmd.includes('Find-NetRoute')) {
       // Return whichever interface has the lower metric
       const sorted = [...ifaces.values()].sort((a, b) => a.metric - b.metric);
       return String(sorted[0].index);
-    }
-
-    // Route add / remove
-    if (cmd.includes('New-NetRoute') || cmd.includes('Remove-NetRoute')) {
-      return '';
     }
 
     return '';
@@ -82,7 +136,7 @@ function createMockEnvironment() {
     // Look up which interface currently has the lowest metric
     const sorted = [...ifaces.values()].sort((a, b) => a.metric - b.metric);
     const preferred = sorted[0];
-    const ip = preferred.index === 12 ? '10.97.128.167' : '10.41.171.54';
+    const ip = preferred.index === 12 ? '192.168.1.100' : '192.168.2.100';
     return { ok: true, localAddress: ip };
   };
 
@@ -100,10 +154,10 @@ const wifiAdapter = {
   kind: 'wifi',
   alias: 'Wi-Fi',
   index: 12,
-  description: 'Intel(R) Wi-Fi 6 AX203',
-  ip: '10.97.128.167',
+  description: 'Synthetic Wi-Fi 6 Adapter',
+  ip: '192.168.1.100',
   prefix: 24,
-  gateway: '10.97.128.135',
+  gateway: '192.168.1.1',
   metric: 75,
   autoMetric: false,
   up: true,
@@ -115,10 +169,10 @@ const usbAdapter = {
   kind: 'usb',
   alias: 'Ethernet 2',
   index: 17,
-  description: 'Remote NDIS based Internet Sharing Device',
-  ip: '10.41.171.54',
+  description: 'Synthetic USB Ethernet Adapter',
+  ip: '192.168.2.100',
   prefix: 24,
-  gateway: '10.41.171.250',
+  gateway: '192.168.2.1',
   metric: 5,
   autoMetric: false,
   up: true,
@@ -199,7 +253,7 @@ test('2. Complete reverse-order rollback verified', async () => {
 test('3. Verification failure triggers rollback and verified rollback report', async () => {
   const env = createMockEnvironment();
   // Simulate verification returning the wrong local source address
-  const badConnect = async () => ({ ok: true, localAddress: '10.41.171.54' }); // wrong IP, not Wi-Fi
+  const badConnect = async () => ({ ok: true, localAddress: '192.168.2.100' }); // wrong IP, not Wi-Fi
 
   const ctl = new WinController({
     stateFile: env.stateFile,
@@ -287,7 +341,7 @@ test('6. State-file preservation after failed recovery', async () => {
   // Populate state file
   const testState = {
     originals: [{ index: 12, alias: 'Wi-Fi', metric: 75, autoMetric: false }],
-    pinned: [{ ip: '1.1.1.1', index: 12, gateway: '10.97.128.135' }],
+    pinned: [{ ip: '1.1.1.1', index: 12, gateway: '192.168.1.1' }],
   };
   fs.writeFileSync(env.stateFile, JSON.stringify(testState, null, 2));
 
@@ -342,10 +396,10 @@ test('8. Virtual adapter exclusion: VirtualBox and vEthernet detected and exclud
   assert.ok(!isVirtualOrExcluded('Remote NDIS based Internet Sharing Device', 'Ethernet 2'));
 
   const rows = [
-    { index: 12, alias: 'Wi-Fi', description: 'Intel Wi-Fi 6', ip: '10.97.128.167', prefix: 24, gateway: '10.97.128.135', metric: 75, autoMetric: false },
-    { index: 15, alias: 'VMnet8', description: 'VMware Virtual Ethernet Adapter', ip: '192.168.1.1', prefix: 24, gateway: '192.168.1.254', metric: 20, autoMetric: false },
-    { index: 21, alias: 'VMnet1', description: 'VMware Virtual Ethernet Adapter', ip: '192.168.2.1', prefix: 24, gateway: '192.168.2.254', metric: 20, autoMetric: false },
-    { index: 17, alias: 'Ethernet 2', description: 'Remote NDIS', ip: '10.41.171.54', prefix: 24, gateway: '10.41.171.250', metric: 5, autoMetric: false },
+    { index: 12, alias: 'Wi-Fi', description: 'Intel Wi-Fi 6', ip: '192.168.1.100', prefix: 24, gateway: '192.168.1.1', metric: 75, autoMetric: false },
+    { index: 15, alias: 'VMnet8', description: 'VMware Virtual Ethernet Adapter', ip: '192.168.88.1', prefix: 24, gateway: '192.168.88.254', metric: 20, autoMetric: false },
+    { index: 21, alias: 'VMnet1', description: 'VMware Virtual Ethernet Adapter', ip: '192.168.99.1', prefix: 24, gateway: '192.168.99.254', metric: 20, autoMetric: false },
+    { index: 17, alias: 'Ethernet 2', description: 'Remote NDIS', ip: '192.168.2.100', prefix: 24, gateway: '192.168.2.1', metric: 5, autoMetric: false },
   ];
 
   const filtered = toAdapters(rows);
@@ -359,7 +413,7 @@ test('9. Application restart with unfinished recovery state restores settings on
   env.ifaces.set(12, { index: 12, metric: 5, autoMetric: false, alias: 'Wi-Fi' });
   const interruptedState = {
     originals: [{ index: 12, alias: 'Wi-Fi', metric: 75, autoMetric: false }],
-    pinned: [{ ip: '1.1.1.1', index: 12, gateway: '10.97.128.135' }],
+    pinned: [{ ip: '1.1.1.1', index: 12, gateway: '192.168.1.1' }],
   };
   fs.writeFileSync(env.stateFile, JSON.stringify(interruptedState, null, 2));
 

@@ -25,7 +25,7 @@ if (-not $isAdmin) {
   exit 1
 }
 
-$probeIps = @('1.1.1.1','1.0.0.1','8.8.8.8','8.8.4.4','9.9.9.10','149.112.112.10')
+
 
 function Is-VirtualAdapter([string]$alias, [string]$desc) {
   $combined = "$alias $desc"
@@ -56,6 +56,26 @@ if (Test-Path $StateFile) {
         continue
       }
 
+      # Validate adapter identity before restoring metric
+      if ($o.guid -or $o.mac) {
+        $hw = Get-NetAdapter -InterfaceIndex $o.index -ErrorAction SilentlyContinue
+        if (-not $hw) {
+          Write-Warning "Recovery refused on index $($o.index) ($($o.alias)): adapter identity query failed or adapter unavailable"
+          $verifiedSuccess = $false
+          continue
+        }
+        if ($o.guid -and ($hw.InterfaceGuid -ne $o.guid)) {
+          Write-Warning "Recovery refused on index $($o.index) ($($o.alias)): GUID mismatch (expected $($o.guid), actual $($hw.InterfaceGuid))"
+          $verifiedSuccess = $false
+          continue
+        }
+        if ($o.mac -and ($hw.MacAddress -and ($hw.MacAddress.ToLower() -ne $o.mac.ToLower()))) {
+          Write-Warning "Recovery refused on index $($o.index) ($($o.alias)): MAC mismatch (expected $($o.mac), actual $($hw.MacAddress))"
+          $verifiedSuccess = $false
+          continue
+        }
+      }
+
       try {
         if ($o.autoMetric) {
           Set-NetIPInterface -InterfaceIndex $o.index -AddressFamily IPv4 -AutomaticMetric Enabled
@@ -72,19 +92,68 @@ if (Test-Path $StateFile) {
     }
   }
 
-  # Remove pinned routes recorded in state
+  # Remove owned pinned routes recorded in state (FAIL-CLOSED: never destination-only)
   if ($s.pinned -and $s.pinned.Count -gt 0) {
     foreach ($p in $s.pinned) {
+      $targetIp = if ($p.ip) { $p.ip } else { ($p.prefix -split '/')[0] }
+      if (-not $targetIp -or -not $p.index) {
+        Write-Warning "Skipping invalid route record: missing target IP or interface index"
+        continue
+      }
+
+      # Validate adapter identity if recorded
+      if ($p.guid -or $p.mac) {
+        $hw = Get-NetAdapter -InterfaceIndex $p.index -ErrorAction SilentlyContinue
+        if (-not $hw -or ($p.guid -and $hw.InterfaceGuid -ne $p.guid) -or ($p.mac -and $hw.MacAddress.ToLower() -ne $p.mac.ToLower())) {
+          Write-Warning "Route cleanup refused for $targetIp/32 on index $($p.index): adapter identity changed or unavailable"
+          $verifiedSuccess = $false
+          continue
+        }
+      }
+
       try {
-        Remove-NetRoute -DestinationPrefix "$($p.ip)/32" -Confirm:$false -ErrorAction SilentlyContinue
-        Write-Host "Removed pinned probe route: $($p.ip)/32"
-      } catch { /* ignore */ }
+        $ownedRoutes = Get-NetRoute -DestinationPrefix "$targetIp/32" -InterfaceIndex $p.index -ErrorAction SilentlyContinue
+        if ($ownedRoutes) {
+          $matches = @($ownedRoutes | Where-Object { (-not $p.gateway -or -not $_.NextHop -or $_.NextHop -eq $p.gateway) })
+          if ($matches.Count -eq 1) {
+            $removeArgs = @{
+              DestinationPrefix = "$targetIp/32"
+              InterfaceIndex = $p.index
+              Confirm = $false
+              ErrorAction = 'SilentlyContinue'
+            }
+            if ($p.gateway -and $p.gateway -ne '0.0.0.0') {
+              $removeArgs['NextHop'] = $p.gateway
+            }
+            Remove-NetRoute @removeArgs
+            Write-Host "Removed owned pinned probe route: $targetIp/32 on interface index $($p.index)"
+          } elseif ($matches.Count -gt 1) {
+            Write-Warning "Ambiguous route ownership for $targetIp/32 on index $($p.index): multiple matching routes found; preserving route."
+            $verifiedSuccess = $false
+          } else {
+            Write-Warning "Preserving unrelated route for $targetIp/32 on index $($p.index): gateway does not match owned NetSwitch route record"
+          }
+        }
+      } catch {
+        Write-Warning "Error querying route for $targetIp/32 on index $($p.index): $($_.Exception.Message)"
+        $verifiedSuccess = $false
+      }
     }
   }
 
-  # Also remove standard probe target host routes
-  foreach ($ip in $probeIps) {
-    Remove-NetRoute -DestinationPrefix "$ip/32" -Confirm:$false -ErrorAction SilentlyContinue
+  # Independent verification of route deletion
+  Write-Host "`nIndependently verifying probe route removal..."
+  if ($s.pinned) {
+    foreach ($p in $s.pinned) {
+      $tip = if ($p.ip) { $p.ip } else { ($p.prefix -split '/')[0] }
+      if ($tip -and $p.index) {
+        $remaining = Get-NetRoute -DestinationPrefix "$tip/32" -InterfaceIndex $p.index -ErrorAction SilentlyContinue
+        if ($remaining) {
+          Write-Warning "Verification failure: Route $tip/32 on interface $($p.index) is still present in Windows routing table after cleanup!"
+          $verifiedSuccess = $false
+        }
+      }
+    }
   }
 
   # Independent verification
@@ -120,11 +189,7 @@ if (Test-Path $StateFile) {
     Write-Warning "One or more restored settings could not be verified! Preserving state file at $StateFile for investigation.`n"
   }
 } else {
-  Write-Host "No state file found at $StateFile. Cleaning up any stray pinned probe routes..."
-  foreach ($ip in $probeIps) {
-    Remove-NetRoute -DestinationPrefix "$ip/32" -Confirm:$false -ErrorAction SilentlyContinue
-  }
-  Write-Host "Probe routes cleaned."
+  Write-Host "No state file found at $StateFile. Zero network changes made."
 }
 
 Write-Host "Current IPv4 interface metrics (excluding VMware and virtual adapters):"

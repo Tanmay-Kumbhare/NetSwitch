@@ -18,11 +18,15 @@ export function trailingLostSince(samples) {
 }
 
 export class Agent extends EventEmitter {
-  constructor({ controller, repo, cfg = DEFAULTS, log = console.log }) {
+  constructor({ controller, repo, cfg = DEFAULTS, ProbeDriver, log = console.log }) {
     super();
     this.controller = controller; this.repo = repo; this.cfg = structuredClone(cfg); this.log = log;
+    this.ProbeDriver = ProbeDriver;
+    this.failoverEnabled = !!(this.cfg.failoverEnabled && this.controller.failoverEnabled !== false);
+    this.autoFailoverEnabled = !!(this.cfg.autoFailoverEnabled && this.failoverEnabled);
+    this.probeRoutePinning = !!(this.cfg.probeRoutePinning && this.controller.probeRoutePinning !== false);
     this.adapters = new Map(); // id -> adapter + driver
-    this.state = null; this.phase = 'UNVERIFIED';
+    this.state = null; this.phase = !this.failoverEnabled ? 'MONITOR_ONLY' : (!this.autoFailoverEnabled ? 'MANUAL_ONLY' : 'UNVERIFIED');
     this.switching = false; this.failCooldownUntil = 0;
     this.timers = []; this.pendingRows = []; this.lastSnapshot = null; this.startedAt = Date.now();
     this.recent = []; // recent failover events (memory copy for the dashboard)
@@ -33,29 +37,59 @@ export class Agent extends EventEmitter {
   #targets(a) { return this.cfg.targets[a.kind] ?? this.cfg.targets.other; }
 
   #makeDriver(a) {
+    if (this.ProbeDriver) return new this.ProbeDriver(a, this.mode === 'sim' ? this.controller.profiles?.[a.id] : this.#targets(a), this.cfg);
     return this.mode === 'sim'
       ? new SimProbeDriver(a, this.controller.profiles[a.id], this.cfg)
       : new RealProbeDriver(a, this.#targets(a), this.cfg);
   }
 
+  async refreshDiscovery() {
+    return this.#refreshDiscovery();
+  }
+
   async #addAdapter(d) {
     const isEligible = d.eligible !== false && (d.kind === 'wifi' || d.kind === 'usb');
-    const a = { ...d, eligible: isEligible, up: true, pathVerified: false, pinError: null, currentMetric: d.metric };
-    if (this.mode === 'sim') a.pathVerified = true;
-    else if (this.canControl && isEligible) {
-      try { await this.controller.pin(a, this.#targets(a)); a.pathVerified = true; }
-      catch (e) { a.pinError = e.message; this.log(`[agent] pin failed for ${a.id}: ${e.message}`); }
+    const a = {
+      ...d,
+      mac: d.mac || null,
+      guid: d.guid || null,
+      pnpId: d.pnpId || null,
+      ambiguous: false,
+      eligible: isEligible,
+      up: true,
+      pathVerified: false,
+      pinError: null,
+      pinNote: null,
+      currentMetric: d.metric
+    };
+    if (this.mode === 'sim') {
+      a.pathVerified = true;
+    } else if (this.probeRoutePinning && this.canControl && isEligible) {
+      try {
+        await this.controller.pin(a, this.#targets(a));
+        a.pathVerified = true;
+      } catch (e) {
+        a.pinError = e.message;
+        this.log(`[agent] pin failed for ${a.id}: ${e.message}`);
+      }
+    } else if (!this.probeRoutePinning) {
+      a.pathVerified = false;
+      a.pinNote = 'unpinned: probe route pinning disabled; measurements subject to Windows default route selection';
     } else if (!isEligible) {
       a.pinError = 'ineligible adapter type';
-    } else a.pinError = 'not administrator';
-    a.driver = this.#makeDriver(a); a.driver.start();
+    } else {
+      a.pinError = 'not administrator';
+    }
+    a.driver = this.#makeDriver(a);
+    a.driver.start();
     this.adapters.set(a.id, a);
     await this.repo.upsertInterface(a).catch((e) => this.log('[db] upsertInterface', e.message));
-    this.log(`[agent] adapter ${a.id}: ${a.alias} ${a.ip} gw ${a.gateway} metric ${a.metric} eligible=${a.eligible} pathVerified=${a.pathVerified}`);
+    this.log(`[agent] adapter ${a.id}: ${a.alias} ${a.ip} gw ${a.gateway} metric ${a.metric} eligible=${a.eligible} pathVerified=${a.pathVerified}${a.pinNote ? ' (' + a.pinNote + ')' : ''}`);
   }
 
   async start() {
     await this.controller.init();
+    this.recoveryPending = !!this.controller.recoveryPending;
     const saved = await this.repo.getConfig().catch(() => ({}));
     this.cfg = mergeConfig(this.cfg, saved);
     const found = await this.controller.discover();
@@ -64,6 +98,7 @@ export class Agent extends EventEmitter {
     if (!up.length) this.log('[agent] no active adapters found');
     this.state = initialState(up[0]?.id ?? null, up[0]?.id ?? null);
     const { probe } = this.cfg;
+    this.#evaluate();
     this.timers.push(setInterval(() => this.#evaluate(), probe.evalEveryMs));
     this.timers.push(setInterval(() => this.#refreshDiscovery().catch((e) => this.log('[agent] discovery', e.message)), 5000));
     this.timers.push(setInterval(() => this.#persist().catch(() => {}), probe.snapshotEveryMs));
@@ -72,21 +107,63 @@ export class Agent extends EventEmitter {
   async stop() {
     this.timers.forEach(clearInterval); this.timers = [];
     for (const a of this.adapters.values()) a.driver.stop();
-    await this.controller.restoreAll().catch(() => {}); // restore on exit
+    if (this.probeRoutePinning || this.failoverEnabled) {
+      await this.controller.restoreAll().catch(() => {}); // restore on exit
+    }
   }
 
   async #refreshDiscovery() {
     const found = await this.controller.discover();
     const foundIds = new Set(found.map((d) => d.id));
-    for (const a of this.adapters.values()) if (!foundIds.has(a.id)) a.up = false;
+
+    // Handle disconnected adapters: stop probe driver promptly to prevent resource leaks
+    for (const a of this.adapters.values()) {
+      if (!foundIds.has(a.id)) {
+        if (a.up) {
+          a.up = false;
+          if (a.driver && typeof a.driver.stop === 'function') {
+            a.driver.stop();
+          }
+          this.log(`[agent] adapter ${a.id} went offline (${a.alias}); stopped probe driver`);
+        }
+      }
+    }
+
     for (const d of found) {
       const a = this.adapters.get(d.id);
       if (!a) { await this.#addAdapter(d); continue; }
-      a.up = true; a.currentMetric = d.metric; a.metric = d.metric;
-      if (a.ip !== d.ip || a.gateway !== d.gateway || a.index !== d.index) { // address changed: rebuild probes and pins
-        this.log(`[agent] ${a.id} changed address/gateway; re-pinning`);
-        a.driver.stop(); await this.controller.unpin(this.#targets(a)).catch(() => {});
-        this.adapters.delete(d.id); await this.#addAdapter(d);
+
+      // Validate hardware identity
+      if (a.mac && d.mac && a.mac.toLowerCase() !== d.mac.toLowerCase()) {
+        this.log(`[agent] WARNING: adapter ${d.id} hardware identity conflict: expected MAC ${a.mac}, observed ${d.mac}. Marking unavailable.`);
+        a.ambiguous = true;
+        a.up = false;
+        if (a.driver && typeof a.driver.stop === 'function') a.driver.stop();
+        continue;
+      }
+
+      a.ambiguous = false;
+      a.mac = d.mac || a.mac || null;
+      a.guid = d.guid || a.guid || null;
+      a.pnpId = d.pnpId || a.pnpId || null;
+
+      const wasDown = !a.up;
+      a.up = true;
+      a.currentMetric = d.metric;
+      a.metric = d.metric;
+
+      if (a.ip !== d.ip || a.gateway !== d.gateway || a.index !== d.index) { // address or index changed: rebuild probes and pins
+        this.log(`[agent] ${a.id} changed address/gateway/index; re-pinning and rebuilding driver`);
+        if (a.driver && typeof a.driver.stop === 'function') a.driver.stop();
+        if (this.probeRoutePinning && this.canControl) {
+          await this.controller.unpin(this.#targets(a), a).catch(() => {});
+        }
+        this.adapters.delete(d.id);
+        await this.#addAdapter(d);
+      } else if (wasDown) {
+        this.log(`[agent] adapter ${a.id} reconnected (${a.alias}); restarting probe driver`);
+        a.driver = this.#makeDriver(a);
+        a.driver.start();
       }
     }
     // Sync with reality if somebody changed metrics outside NetSwitch.
@@ -129,25 +206,36 @@ export class Agent extends EventEmitter {
       view.push({ id: a.id, kind: a.kind, eligible: isEligible, alias: a.alias, description: a.description, index: a.index, ip: a.ip, prefix: a.prefix, gateway: a.gateway, network: net?.network ?? null,
         metric: a.currentMetric, up: a.up, band, score: a.up ? m.result.score : null, lossPct: m.stats.lossPct, rttMs: m.stats.medianRtt, lastRttMs: m.stats.lastRtt, jitterMs: m.stats.jitter,
         tcpMs: m.tcp?.ok ? m.tcp.ms : null, tcpOk: m.tcpFresh ? m.tcp.ok : null, consecutiveLost: m.stats.consecutiveLost, samples: m.stats.sent,
-        udpFiltered: m.udpFiltered, parts: m.result.parts, missing: m.result.missing, pathVerified: a.pathVerified, pinError: a.pinError, targets: this.mode === 'sim' ? [] : this.#targets(a) });
+        udpFiltered: m.udpFiltered, parts: m.result.parts, missing: m.result.missing, pathVerified: a.pathVerified, pinError: a.pinError, pinNote: a.pinNote || null, targets: this.mode === 'sim' ? [] : this.#targets(a) });
     }
-    if (this.state && this.canControl && !this.switching && this.state.activeId) {
+    if (this.failoverEnabled && this.autoFailoverEnabled && this.state && this.canControl && !this.switching && this.state.activeId) {
       if (now >= this.failCooldownUntil) {
         const res = decide(this.state, inputs, now, this.cfg.decide);
         this.phase = res.phase;
         if (res.action) { const prev = this.state; this.state = res.state; this.#doSwitch(prev.activeId, res.action.to, res.action.reason, now); }
         else this.state = res.state;
       }
-    } else if (!this.canControl) this.phase = 'MONITOR_ONLY';
+    } else {
+      this.phase = !this.failoverEnabled ? 'MONITOR_ONLY' : (!this.canControl ? 'NOT_ADMIN' : (!this.autoFailoverEnabled ? 'MANUAL_ONLY' : this.phase));
+    }
     this.lastSnapshot = {
-      type: 'snapshot', ts: now, mode: this.mode, canControl: this.canControl, switching: this.switching,
-      activeId: this.state?.activeId ?? null, preferredId: this.state?.preferredId ?? null, phase: this.switching ? 'FAILING_OVER' : this.phase,
+      type: 'snapshot', ts: now, mode: this.mode, canControl: this.canControl,
+      recoveryPending: !!this.recoveryPending,
+      failoverEnabled: this.failoverEnabled,
+      autoFailoverEnabled: this.autoFailoverEnabled,
+      probeRoutePinning: this.probeRoutePinning, switching: this.switching,
+      activeId: this.state?.activeId ?? null, preferredId: this.state?.preferredId ?? null,
+      phase: !this.failoverEnabled ? 'MONITOR_ONLY' : (this.switching ? 'FAILING_OVER' : this.phase),
       holdRemainingMs: Math.max(0, (this.state?.holdUntil ?? 0) - now), adapters: view,
     };
     this.emit('snapshot', this.lastSnapshot);
   }
 
   async #doSwitch(from, to, reason, decidedAt) {
+    if (!this.failoverEnabled) {
+      this.log(`[agent] switch ${from} -> ${to} blocked: failover disabled (monitor-only mode)`);
+      return { ok: false, note: 'failover disabled by configuration (monitor-only mode)' };
+    }
     this.switching = true;
     const a = this.adapters.get(from);
     const lostSince = reason === 'hard_failure' || reason === 'adapter_down' ? a?.m?.lostSince ?? null : null;
@@ -168,6 +256,7 @@ export class Agent extends EventEmitter {
 
   /** Manual switch from the Control page. */
   async switchTo(to) {
+    if (!this.failoverEnabled) return { ok: false, note: 'failover disabled by configuration (monitor-only mode)' };
     if (!this.canControl) return { ok: false, note: 'control disabled (not administrator)' };
     if (this.switching) return { ok: false, busy: true, note: 'switch already in progress' };
     const from = this.state.activeId;

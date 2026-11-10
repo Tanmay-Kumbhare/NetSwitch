@@ -6,7 +6,7 @@ import AdapterCard from '../components/AdapterCard.jsx';
 import FailoverTable from '../components/FailoverTable.jsx';
 
 const COLORS = ['#0d9488', '#6366f1', '#d97706', '#db2777'];
-const PHASE = { STABLE: ['ok', 'Stable'], HOLD_DOWN: ['live', 'Hold-down'], UNVERIFIED: ['', 'Warming up'], NO_INTERNET: ['bad', 'No verified internet'], FAILING_OVER: ['sim', 'Failing over…'], MONITOR_ONLY: ['', 'Monitor only'] };
+const PHASE = { STABLE: ['ok', 'Stable'], HOLD_DOWN: ['live', 'Hold-down'], UNVERIFIED: ['', 'Warming up'], NO_INTERNET: ['bad', 'No verified internet'], FAILING_OVER: ['sim', 'Failing over…'], MONITOR_ONLY: ['', 'Monitor only'], MANUAL_ONLY: ['live', 'Manual only'] };
 
 export default function Dashboard() {
   const { snapshot: s, series, events, status } = useLive();

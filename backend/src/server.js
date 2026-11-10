@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
-import { DEFAULTS } from './config.js';
+import { DEFAULTS, parseAppEnv } from './config.js';
 import { Agent } from './agent.js';
 import { createRepo } from './db/index.js';
 import { makeAuth, httpErr } from './auth.js';
@@ -18,10 +18,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export async function createApp({ env = process.env, repo = createRepo(env), controller, log = console.log } = {}) {
   const mode = env.NETSWITCH_MODE || (process.platform === 'win32' ? 'windows' : 'sim');
-  controller ||= mode === 'sim' ? new SimController()
-    : new WinController({ stateFile: path.resolve(env.NETSWITCH_STATE || path.join(here, '..', '..', 'netswitch-state.json')), cfg: DEFAULTS, log });
+  const appEnv = parseAppEnv(env);
+  const cfg = {
+    ...DEFAULTS,
+    failoverEnabled: appEnv.failoverEnabled,
+    autoFailoverEnabled: appEnv.autoFailoverEnabled,
+    probeRoutePinning: appEnv.probeRoutePinning,
+  };
+  controller ||= mode === 'sim'
+    ? new SimController({ cfg, log })
+    : new WinController({ stateFile: path.resolve(env.NETSWITCH_STATE || path.join(here, '..', '..', 'netswitch-state.json')), cfg, log });
   await repo.init();
-  const agent = new Agent({ controller, repo, log });
+  const agent = new Agent({ controller, repo, cfg, log });
   await agent.start();
   const auth = makeAuth(repo);
 
@@ -36,7 +44,7 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   app.post('/api/auth/login', wrap(async (req, res) => res.json(await auth.login(req.body || {}))));
   app.get('/api/auth/me', any, wrap(async (req, res) => { const u = await repo.findUserById(req.user.sub); if (!u) throw httpErr(401, 'unknown user'); res.json({ id: u.id, email: u.email, name: u.name, role: u.role }); }));
   // 4 health
-  app.get('/api/health', wrap(async (req, res) => res.json({ ok: true, mode, db: repo.kind, dbUp: await repo.ping(), canControl: agent.canControl, uptimeSec: Math.round((Date.now() - agent.startedAt) / 1000), clients: wss.clients.size })));
+  app.get('/api/health', wrap(async (req, res) => res.json({ ok: true, mode, db: repo.kind, dbUp: await repo.ping(), canControl: agent.canControl, recoveryPending: !!agent.recoveryPending, failoverEnabled: agent.failoverEnabled, autoFailoverEnabled: agent.autoFailoverEnabled, probeRoutePinning: agent.probeRoutePinning, uptimeSec: Math.round((Date.now() - agent.startedAt) / 1000), clients: wss.clients.size })));
   // 5-6 interfaces
   app.get('/api/interfaces', any, (req, res) => res.json({ mode, activeId: agent.state?.activeId ?? null, adapters: agent.lastSnapshot?.adapters ?? [] }));
   app.get('/api/interfaces/:key', any, wrap(async (req, res) => {
@@ -55,6 +63,9 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   app.get('/api/failovers', any, wrap(async (req, res) => res.json({ events: await repo.listFailovers(Number(req.query.limit) || 50) })));
   // 9-10 control (admin only)
   app.post('/api/control/switch', admin, wrap(async (req, res) => {
+    if (!agent.failoverEnabled) {
+      throw httpErr(422, 'failover disabled by configuration (monitor-only mode)');
+    }
     const to = req.body?.to; if (typeof to !== 'string' || !/^[a-z0-9]{1,40}$/.test(to)) throw httpErr(400, 'to required');
     const r = await agent.switchTo(to); res.status(r.busy ? 409 : r.ok ? 200 : 422).json(r);
   }));
@@ -64,7 +75,7 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   app.put('/api/config', admin, wrap(async (req, res) => { try { res.json(await agent.updateConfig(req.body)); } catch (e) { throw httpErr(400, e.message); } }));
   // optional: read-only Wi-Fi scan (never connects)
   app.get('/api/wifi/scan', any, wrap(async (req, res) => {
-    if (mode === 'sim') return res.json({ simulated: true, networks: [{ ssid: 'Moto g64 5G (sim)', authentication: 'WPA3-Personal', encryption: 'CCMP', bssids: [{ bssid: '66:71:2f:94:31:f9', signal: 97, radio: '802.11ac', band: '2.4 GHz', channel: 1 }] }] });
+    if (mode === 'sim') return res.json({ simulated: true, networks: [{ ssid: 'NetSwitch-Test-AP (sim)', authentication: 'WPA3-Personal', encryption: 'CCMP', bssids: [{ bssid: '02:00:00:00:00:01', signal: 97, radio: '802.11ax', band: '5 GHz', channel: 36 }] }] });
     try { res.json({ simulated: false, networks: await scanWifi() }); } catch (e) { throw httpErr(503, `scan unavailable: ${e.message}`); }
   }));
   // sim-only fault injection (the Windows demo uses Clumsy instead)
@@ -80,6 +91,12 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   app.use((err, req, res, next) => { if (!err.status) log('[http]', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'internal error' }); });
 
   // ---- WebSocket: authenticated upgrade, 1 s snapshots, failover events ----
+  // SECURITY & PRODUCTION HARDENING NOTE:
+  // Standard browser WebSocket API does not support custom headers (e.g. 'Authorization: Bearer <tok>'),
+  // so JWT tokens are passed via the '?token=' query parameter during HTTP upgrade.
+  // Query parameters are never logged by the application or included in handshake debug headers.
+  // For production environments exposed beyond localhost, a short-lived single-use ticket pattern
+  // (e.g. POST /api/auth/ws-ticket) is recommended to prevent token leakage in external proxy logs.
   const server = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true });
   server.on('upgrade', (req, socket, head) => {

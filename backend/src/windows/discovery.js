@@ -1,17 +1,26 @@
 import { runPs } from './ps.js';
 
 const SCRIPT = `
+$adapters = @{}
+Get-NetAdapter -ErrorAction SilentlyContinue | ForEach-Object { $adapters[[int]$_.InterfaceIndex] = $_ }
+
 $out = @(Get-NetIPConfiguration | Where-Object {
   $_.IPv4DefaultGateway -ne $null -and
   $_.NetAdapter.Status -eq 'Up' -and
   $_.InterfaceAlias -notmatch 'VMware|VMnet|VirtualBox|vEthernet|Hyper-V|Loopback' -and
   $_.InterfaceDescription -notmatch 'VMware|VirtualBox|Hyper-V|Virtual|Loopback'
 } | ForEach-Object {
-  $if = Get-NetIPInterface -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4
+  $idx = [int]$_.InterfaceIndex
+  $if = Get-NetIPInterface -InterfaceIndex $idx -AddressFamily IPv4 -ErrorAction SilentlyContinue
+  $ad = $adapters[$idx]
+  $mac = if ($ad -and $ad.MacAddress) { $ad.MacAddress } elseif ($_.NetAdapter -and $_.NetAdapter.MacAddress) { $_.NetAdapter.MacAddress } else { $null }
+  $guid = if ($ad -and $ad.InterfaceGuid) { $ad.InterfaceGuid } else { $null }
+  $pnpId = if ($ad -and $ad.PnPDeviceID) { $ad.PnPDeviceID } else { $null }
   [pscustomobject]@{
-    alias = $_.InterfaceAlias; index = [int]$_.InterfaceIndex; description = $_.InterfaceDescription;
+    alias = $_.InterfaceAlias; index = $idx; description = $_.InterfaceDescription;
+    mac = $mac; guid = $guid; pnpId = $pnpId;
     ip = $_.IPv4Address[0].IPAddress; prefix = [int]$_.IPv4Address[0].PrefixLength; gateway = $_.IPv4DefaultGateway.NextHop;
-    metric = [int]$if.InterfaceMetric; autoMetric = ($if.AutomaticMetric -eq 'Enabled')
+    metric = if ($if) { [int]$if.InterfaceMetric } else { 75 }; autoMetric = if ($if) { ($if.AutomaticMetric -eq 'Enabled') } else { $false }
   } })
 ConvertTo-Json -Compress -InputObject $out
 `;
@@ -44,6 +53,9 @@ export function toAdapters(rows) {
       alias: r.alias,
       index: r.index,
       description: r.description,
+      mac: r.mac || null,
+      guid: r.guid || null,
+      pnpId: r.pnpId || null,
       ip: r.ip,
       prefix: r.prefix,
       gateway: r.gateway,

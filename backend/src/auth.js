@@ -7,6 +7,10 @@ export function makeAuth(repo, secret = process.env.JWT_SECRET || crypto.randomB
   const verify = (t) => { try { return jwt.verify(t, secret); } catch { return null; } };
   const strip = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role });
 
+  // SECURITY NOTE (Prototype Bootstrap): The first registered user automatically
+  // receives the 'admin' role, while all subsequent users receive 'viewer'.
+  // In this localhost prototype (bound strictly to 127.0.0.1), the initial registration
+  // must be performed by the intended project owner upon startup before opening any other sessions.
   async function register({ email, name, password }) {
     if (typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 190) throw httpErr(400, 'valid email required');
     if (typeof name !== 'string' || !name.trim() || name.length > 100) throw httpErr(400, 'name required');
