@@ -32,6 +32,22 @@ No eligible candidate → NO_INTERNET, never switch. Null score → never switch
 POST /api/auth/register · POST /api/auth/login · GET /api/auth/me · GET /api/health · GET /api/interfaces · GET /api/interfaces/:key ·
 GET /api/readings?interface=&minutes= · GET /api/failovers · POST /api/control/switch {to} (admin) · POST /api/control/restore (admin) ·
 GET /api/config · PUT /api/config (admin). Extra: GET /api/wifi/scan (read-only); sim mode: POST /api/sim/impair, /api/sim/reset.
+Lab endpoints (requireAuth): GET /api/lab/status · POST /api/lab/tcp · POST /api/lab/udp · POST /api/lab/udp-drop (admin) · POST /api/lab/concurrency · POST /api/lab/dijkstra · GET /api/lab/routing-graph · GET /api/lab/packet · POST /api/lab/tool · GET /api/lab/mail · POST /api/lab/mail/send · GET /api/lab/mail/pop3.
+
+## Protocol Lab Subsystem (`backend/src/lab/`)
+The Lab is a self-contained pedagogical subsystem that provides interactive protocol testing mapped to the Computer Network Technology (CNT) syllabus:
+- **Server Ports (127.0.0.1 only):**
+  - **TCP Server:** Port `5051` (custom Berkeley command protocol: HELLO, ECHO, LIST, GET file transfer, TIME, PRIME)
+  - **UDP Server:** Port `5052` (connectionless datagram calculator: sin, cos, tan, sqrt, log, with simulated drop toggle)
+  - **SMTP Server:** Port `5025` (text protocol dialog, 354 handling, base64 MIME encoding)
+  - **POP3 Server:** Port `5110` (maildrop retrieval, RETR command dialog)
+  - *Dynamic Port Fallback:* If a port is already bound, `SocketLab` and `MailLab` automatically select an ephemeral free port.
+- **Worker Thread Concurrency (`pool.js` + `calc.worker.js`):** A fixed pool of `worker_threads` handles CPU-bound mathematical operations (`PRIME`, trigonometry) without blocking the Node.js event loop.
+- **Link-State Dijkstra (`dijkstra.js`):** Generates dynamic graph from `agent.lastSnapshot` with edge cost = RTT + 10 × loss%, calculating the shortest path from laptop to internet.
+- **Packet Dissector (`packet.js`):** Breaks down the NetSwitch 71-byte UDP/DNS probe into Layer 2 (Ethernet II 14B), Layer 3 (IPv4 20B), Layer 4 (UDP 8B), and Application Layer (DNS 29B).
+- **Network Tool Diagnostics (`tools.js`):** Safe, fixed whitelist of diagnostic tools (`ping`, `tracert`, `arp`, `netstat`, `route`, `ipconfig`, `nbtstat`, `nslookup`, `tls`) using `child_process.execFile` (no shell invocation, strict hostname/IPv4 regex validation, SSRF guard blocking private IP probes for TLS).
+- **Failover Integration:** When an adapter failover occurs, `agent.on('failover')` automatically calls `lab.onFailover(event)` to send an alert email to the local SMTP maildrop.
+- **Graceful Shutdown:** `lab.close()` terminates all worker threads, stops socket listeners, and closes client connections after `agent.stop()`.
 
 ## WebSocket `/ws?token=<JWT>`
 Server → client: `hello` (mode, user, handshake request/response lines), `snapshot` every 1 s, `failover` events, `pong`. Client → server: `{type:"ping"}`.
@@ -40,4 +56,4 @@ Server → client: `hello` (mode, user, handshake request/response lines), `snap
 users · interfaces · readings (indexed by interface_id, ts) · failover_events (detect/switch/total ms) · config.
 
 ## Security rules
-Server binds to 127.0.0.1. PowerShell runs fixed scripts with validated integers/IPv4 only. Passwords bcrypt-hashed. Control endpoints need the admin role. Wi-Fi scan is read-only.
+Server binds to 127.0.0.1. PowerShell runs fixed scripts with validated integers/IPv4 only. Passwords bcrypt-hashed. Control endpoints need the admin role. Wi-Fi scan is read-only. Lab tools avoid shell execution and enforce argument whitelisting.

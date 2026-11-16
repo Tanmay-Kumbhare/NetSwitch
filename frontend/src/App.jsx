@@ -10,6 +10,7 @@ import History from './pages/History.jsx';
 import Control from './pages/Control.jsx';
 import InterfaceDetail from './pages/InterfaceDetail.jsx';
 import Learn from './pages/Learn.jsx';
+import Lab from './pages/Lab.jsx';
 
 function Shell({ children }) {
   const { user, logout } = useAuth();
@@ -22,7 +23,7 @@ function Shell({ children }) {
           <Navbar.Toggle />
           <Navbar.Collapse>
             <Nav className="me-auto">
-              {[['/', 'Dashboard'], ['/history', 'History'], ['/control', 'Control'], ['/learn', 'Learn']].map(([to, label]) => (
+              {[['/', 'Dashboard'], ['/history', 'History'], ['/control', 'Control'], ['/learn', 'Learn'], ['/lab', 'Lab']].map(([to, label]) => (
                 <Nav.Link key={to} as={NavLink} to={to} end={to === '/'}>{label}</Nav.Link>
               ))}
             </Nav>
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/control" element={<Control />} />
         <Route path="/interfaces/:key" element={<InterfaceDetail />} />
         <Route path="/learn" element={<Learn />} />
+        <Route path="/lab" element={<Lab />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Shell>
