@@ -307,7 +307,7 @@ export default function Demo() {
                 stroke="#dc2626"
                 strokeDasharray="3 3"
                 label={{
-                  value: `⚡ ${s.action.reason}`,
+                  value: `⚡ ${String(s.action.reason).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}`,
                   position: 'insideTopLeft',
                   fill: '#dc2626',
                   fontSize: 10,

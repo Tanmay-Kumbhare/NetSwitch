@@ -119,7 +119,10 @@ export default function Dashboard() {
           seenX.add(closest.label);
           scoreMarkers.push({
             x: closest.label,
-            reason: String(ev.reason || 'failover').replace('_', ' '),
+            reason: String(ev.reason || 'failover')
+              .split(/[_\s-]+/)
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+              .join(' '),
             ts: ev.ts,
           });
         }
