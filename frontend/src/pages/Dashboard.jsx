@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Col, Row, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Col, Row, Spinner, Table } from 'react-bootstrap';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
+import { useAuth } from '../auth.jsx';
 import { useLive } from '../live.jsx';
 import { api } from '../api.js';
 import AdapterCard from '../components/AdapterCard.jsx';
 import FailoverTable from '../components/FailoverTable.jsx';
+import WifiConnectModal from '../components/WifiConnectModal.jsx';
 
 const COLORS = ['#0d9488', '#6366f1', '#d97706', '#db2777'];
 const PHASE = {
@@ -28,11 +30,35 @@ function formatTimeSince(ts, nowMs) {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { snapshot: s, series, events, status } = useLive();
   const [cfg, setCfg] = useState(null);
   const [wifiStatus, setWifiStatus] = useState(null);
   const [wifiAdvisor, setWifiAdvisor] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [connectTarget, setConnectTarget] = useState(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectErr, setConnectErr] = useState(null);
+
+  const reloadWifiData = () => {
+    api('/api/wifi/status').then((w) => setWifiStatus(w)).catch(() => {});
+    api('/api/wifi/advisor').then((a) => setWifiAdvisor(a)).catch(() => {});
+  };
+
+  const handleConfirmConnect = async () => {
+    if (!connectTarget) return;
+    setConnecting(true);
+    setConnectErr(null);
+    try {
+      await api('/api/wifi/connect', { method: 'POST', body: { profile: connectTarget } });
+      setConnectTarget(null);
+      reloadWifiData();
+    } catch (e) {
+      setConnectErr(e.message);
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   useEffect(() => {
     let on = true;
@@ -240,6 +266,7 @@ export default function Dashboard() {
                     <th>Measured Avg Score</th>
                     <th>Predicted Rating</th>
                     <th>Advisor Status</th>
+                    <th style={{ width: 90 }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -283,6 +310,24 @@ export default function Dashboard() {
                             {isWinPick && <span className="ns-pill off">WINDOWS PICK</span>}
                           </div>
                         </td>
+                        <td>
+                          {user?.role === 'admin' ? (
+                            isConnected ? (
+                              <span className="text-muted small" style={{ fontSize: '0.75rem' }}>Active</span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant={isRecommended ? 'success' : 'outline-primary'}
+                                style={{ fontSize: '0.72rem', padding: '0.12rem 0.5rem' }}
+                                onClick={() => { setConnectErr(null); setConnectTarget(net.ssid); }}
+                              >
+                                Connect
+                              </Button>
+                            )
+                          ) : (
+                            <span className="text-muted small" style={{ fontSize: '0.75rem' }}>—</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -290,6 +335,15 @@ export default function Dashboard() {
               </Table>
             </div>
           )}
+
+          <WifiConnectModal
+            show={!!connectTarget}
+            onHide={() => { if (!connecting) setConnectTarget(null); }}
+            profile={connectTarget}
+            onConfirm={handleConfirmConnect}
+            connecting={connecting}
+            error={connectErr}
+          />
         </div>
       )}
 

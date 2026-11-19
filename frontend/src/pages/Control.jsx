@@ -3,6 +3,7 @@ import { Alert, Button, Col, Form, Row, Table } from 'react-bootstrap';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useLive } from '../live.jsx';
+import WifiConnectModal from '../components/WifiConnectModal.jsx';
 
 function SimPanel({ adapters }) {
   const [msg, setMsg] = useState('');
@@ -64,9 +65,13 @@ function SignalBar({ signal }) {
 }
 
 function WifiNetworksPanel() {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [connectTarget, setConnectTarget] = useState(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectErr, setConnectErr] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -77,6 +82,21 @@ function WifiNetworksPanel() {
       setErr(e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmConnect = async () => {
+    if (!connectTarget) return;
+    setConnecting(true);
+    setConnectErr('');
+    try {
+      await api('/api/wifi/connect', { method: 'POST', body: { profile: connectTarget } });
+      setConnectTarget(null);
+      await load();
+    } catch (e) {
+      setConnectErr(e.message);
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -147,9 +167,21 @@ function WifiNetworksPanel() {
               <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                 <ol className="ps-3 mb-0 small">
                   {saved.map((name, i) => (
-                    <li key={`${name}-${i}`} className="py-1">
-                      <span className={cur?.ssid === name ? 'fw-bold text-success' : ''}>{name}</span>
-                      {cur?.ssid === name && <span className="ns-pill live ms-2" style={{ fontSize: '0.65rem' }}>active</span>}
+                    <li key={`${name}-${i}`} className="py-1 d-flex align-items-center justify-content-between">
+                      <div>
+                        <span className={cur?.ssid === name ? 'fw-bold text-success' : ''}>{name}</span>
+                        {cur?.ssid === name && <span className="ns-pill live ms-2" style={{ fontSize: '0.65rem' }}>active</span>}
+                      </div>
+                      {user?.role === 'admin' && cur?.ssid !== name && (
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          style={{ fontSize: '0.68rem', padding: '0.1rem 0.45rem' }}
+                          onClick={() => { setConnectErr(''); setConnectTarget(name); }}
+                        >
+                          Connect
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ol>
@@ -189,6 +221,15 @@ function WifiNetworksPanel() {
           </div>
         </Col>
       </Row>
+
+      <WifiConnectModal
+        show={!!connectTarget}
+        onHide={() => { if (!connecting) setConnectTarget(null); }}
+        profile={connectTarget}
+        onConfirm={handleConfirmConnect}
+        connecting={connecting}
+        error={connectErr}
+      />
     </div>
   );
 }

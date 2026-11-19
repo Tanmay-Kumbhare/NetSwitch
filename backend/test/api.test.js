@@ -5,7 +5,7 @@ import { createApp } from '../src/server.js';
 
 const env = { NETSWITCH_MODE: 'sim', NETSWITCH_DB: 'memory', NETSWITCH_FAILOVER_ENABLED: 'true', NETSWITCH_AUTO_FAILOVER_ENABLED: 'true' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let ctx; let base; let token; let adminToken;
+let ctx; let base; let token; let adminToken; let viewerToken;
 const call = async (method, path, body, tok = token) => {
   const r = await fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(tok ? { authorization: `Bearer ${tok}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
   return { status: r.status, body: await r.json().catch(() => null) };
@@ -22,7 +22,7 @@ test('boot, auth, REST surface', async () => {
   assert.equal(reg.status, 201); assert.equal(reg.body.user.role, 'admin'); adminToken = reg.body.token;
   assert.equal((await call('POST', '/api/auth/register', { email: 'admin@example.com', name: 'Admin', password: 'password123' }, null)).status, 409);
   const viewer = await call('POST', '/api/auth/register', { email: 'v@example.com', name: 'View', password: 'password123' }, null);
-  assert.equal(viewer.body.user.role, 'viewer'); token = adminToken;
+  assert.equal(viewer.body.user.role, 'viewer'); token = adminToken; viewerToken = viewer.body.token;
   assert.equal((await call('POST', '/api/auth/login', { email: 'admin@example.com', password: 'wrong-pass' }, null)).status, 401);
   assert.equal((await call('GET', '/api/auth/me')).body.email, 'admin@example.com');
   assert.equal((await call('POST', '/api/control/switch', { to: 'wifi' }, viewer.body.token)).status, 403);
@@ -90,6 +90,25 @@ test('manual switch, lock, config edit validation, readings query', async () => 
   assert.ok(Array.isArray(adv.body.networks));
   assert.ok(adv.body.networks.length >= 2);
   assert.ok(adv.body.networks[0].predictedRating != null);
+
+  // Wi-Fi connect: netsh wlan connect
+  // 1. Unauthenticated -> 401
+  assert.equal((await call('POST', '/api/wifi/connect', { profile: 'NetSwitch-Test-AP' }, null)).status, 401);
+  // 2. Viewer role -> 403 (admin only)
+  assert.equal((await call('POST', '/api/wifi/connect', { profile: 'NetSwitch-Test-AP' }, viewerToken)).status, 403);
+  // 3. Admin with profile NOT in saved list -> 400
+  assert.equal((await call('POST', '/api/wifi/connect', { profile: 'Unknown-Hacker-AP' }, adminToken)).status, 400);
+  // 4. Admin with empty profile -> 400
+  assert.equal((await call('POST', '/api/wifi/connect', { profile: '' }, adminToken)).status, 400);
+  // 5. Admin with valid saved profile -> 200
+  const connectRes = await call('POST', '/api/wifi/connect', { profile: 'Campus-Guest' }, adminToken);
+  assert.equal(connectRes.status, 200);
+  assert.equal(connectRes.body.ok, true);
+  assert.equal(connectRes.body.connected, 'Campus-Guest');
+
+  // Verify connection updated in status
+  const updatedStatus = await call('GET', '/api/wifi/status', null, adminToken);
+  assert.equal(updatedStatus.body.current.ssid, 'Campus-Guest');
 });
 
 test('REST API integration with MySQL persistence', async () => {

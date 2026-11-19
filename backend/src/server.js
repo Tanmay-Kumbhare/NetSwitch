@@ -11,7 +11,7 @@ import { createRepo } from './db/index.js';
 import { makeAuth, httpErr } from './auth.js';
 import { WinController } from './control/winController.js';
 import { SimController } from './control/simController.js';
-import { scanWifi, getWifiStatus, computeWifiAdvisor, SIMULATED_WIFI_HISTORY } from './windows/wifiScan.js';
+import { scanWifi, getWifiStatus, computeWifiAdvisor, SIMULATED_WIFI_HISTORY, SIMULATED_WIFI_STATUS, showProfiles, showInterfaces, connectWifi, setSimulatedWifiCurrent } from './windows/wifiScan.js';
 import { runDemoScenario, SCENARIO_DEFS } from './core/demo.js';
 import { subnetInfo } from './core/subnet.js';
 
@@ -105,6 +105,48 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
       });
     } catch (e) {
       throw httpErr(503, `Wi-Fi advisor unavailable: ${e.message}`);
+    }
+  }));
+  // admin-only Wi-Fi connect: netsh wlan connect name=<profile> interface=<name>
+  app.post('/api/wifi/connect', admin, wrap(async (req, res) => {
+    const profile = String(req.body?.profile || '').trim();
+    if (!profile) throw httpErr(400, 'Profile name is required');
+
+    let saved = [];
+    if (mode === 'sim') {
+      saved = SIMULATED_WIFI_STATUS.savedProfiles;
+    } else {
+      saved = await showProfiles().catch(() => []);
+    }
+    if (!saved.includes(profile)) {
+      throw httpErr(400, `Profile "${profile}" is not in Windows saved profiles list`);
+    }
+
+    if (mode === 'sim') {
+      setSimulatedWifiCurrent({ ssid: profile, state: 'connected' });
+      return res.json({
+        ok: true,
+        simulated: true,
+        connected: profile,
+        message: `Connection request completed successfully for ${profile} (simulated).`,
+      });
+    }
+
+    let ifName = 'Wi-Fi';
+    const ifInfo = await showInterfaces().catch(() => null);
+    if (ifInfo && ifInfo.name) {
+      ifName = ifInfo.name;
+    }
+
+    try {
+      const result = await connectWifi({ profile, interfaceName: ifName });
+      res.json({
+        ok: true,
+        connected: profile,
+        message: result.message || `Successfully requested connection to ${profile}.`,
+      });
+    } catch (e) {
+      throw httpErr(500, `Failed to connect to ${profile}: ${e.message}`);
     }
   }));
   // in-memory demo scenarios: pure simulation, zero OS mutations or database writes

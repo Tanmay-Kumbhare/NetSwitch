@@ -115,20 +115,43 @@ export function showProfiles() {
   });
 }
 
-export const SIMULATED_WIFI_STATUS = Object.freeze({
+export function connectWifi({ profile, interfaceName = 'Wi-Fi' }) {
+  return new Promise((resolve, reject) => {
+    const args = ['wlan', 'connect', `name=${profile}`];
+    if (interfaceName) {
+      args.push(`interface=${interfaceName}`);
+    }
+    execFile('netsh.exe', args, { timeout: 15000, windowsHide: true }, (err, stdout, stderr) => {
+      if (err) {
+        return reject(new Error((stderr || err.message).toString().trim()));
+      }
+      resolve({ ok: true, message: (stdout || '').trim() });
+    });
+  });
+}
+
+let simulatedCurrent = {
+  name: 'Wi-Fi (sim)',
+  description: 'Virtual 802.11ax Wireless Adapter',
+  state: 'connected',
+  ssid: 'NetSwitch-Test-AP',
+  bssid: '02:00:00:00:00:01',
+  signal: 92,
+  radio: '802.11ax',
+  band: '5 GHz',
+  channel: 36,
+  rxRate: 866,
+  txRate: 866,
+};
+
+export function setSimulatedWifiCurrent(cur) {
+  simulatedCurrent = { ...simulatedCurrent, ...cur };
+}
+
+export const SIMULATED_WIFI_STATUS = {
   simulated: true,
-  current: {
-    name: 'Wi-Fi (sim)',
-    description: 'Virtual 802.11ax Wireless Adapter',
-    state: 'connected',
-    ssid: 'NetSwitch-Test-AP',
-    bssid: '02:00:00:00:00:01',
-    signal: 92,
-    radio: '802.11ax',
-    band: '5 GHz',
-    channel: 36,
-    rxRate: 866,
-    txRate: 866,
+  get current() {
+    return simulatedCurrent;
   },
   savedProfiles: ['NetSwitch-Test-AP', 'Campus-Guest', 'Home-Fiber-5G'],
   scannedNetworks: [
@@ -151,7 +174,7 @@ export const SIMULATED_WIFI_STATUS = Object.freeze({
       bssids: [{ bssid: '02:00:00:00:00:03', signal: 54, radio: '802.11ax', band: '5 GHz', channel: 149 }],
     },
   ],
-});
+};
 
 export const SIMULATED_WIFI_HISTORY = Object.freeze({
   'NetSwitch-Test-AP': { avgScore: 91.2, samples: 120, lastSeen: '2026-11-19T13:00:00.000Z' },
