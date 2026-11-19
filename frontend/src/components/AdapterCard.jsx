@@ -7,12 +7,19 @@ export const BAND_LABEL = { healthy: 'Healthy', degraded: 'Degraded', unhealthy:
 
 function Stat({ k, v }) { return <div className="ns-stat"><span className="v">{v}</span><span className="k">{k}</span></div>; }
 
-export default function AdapterCard({ a, active, pinningEnabled = false, scoreConfig = null }) {
+export default function AdapterCard({ a, active, pinningEnabled = false, scoreConfig = null, wifiStatus = null }) {
   const pathTooltip = a.pathVerified
     ? 'Probes are pinned to this interface via verified /32 routes'
     : (!pinningEnabled
       ? 'Route pinning is off, so probes may not be using this adapter'
       : (a.pinError || 'Route pinning failed or path unverified'));
+
+  const wifi = a.wifi || (a.kind === 'wifi' ? wifiStatus?.current : null);
+  const wifiRate = wifi?.rxRate || wifi?.txRate;
+  const wifiBandCh = wifi?.band && wifi?.channel ? `${wifi.band} ch ${wifi.channel}` : (wifi?.band || (wifi?.channel ? `ch ${wifi.channel}` : ''));
+  const wifiDesc = wifi && wifi.state === 'connected' && wifi.ssid
+    ? `Connected to ${wifi.ssid}${wifi.signal != null ? ` · signal ${wifi.signal}%` : ''}${wifiBandCh ? ` · ${wifiBandCh}` : ''}${wifiRate ? ` · ${wifiRate} Mbps` : ''}`
+    : (wifi ? `Wi-Fi ${wifi.state || 'disconnected'}` : null);
 
   return (
     <div className={`ns-card p-3 h-100 ${active ? 'active' : ''} ${!a.up ? 'down' : ''}`}>
@@ -20,6 +27,11 @@ export default function AdapterCard({ a, active, pinningEnabled = false, scoreCo
         <div>
           <Link to={`/interfaces/${a.id}`} className="fw-semibold text-decoration-none text-dark">{a.alias}</Link>
           <div className="ns-muted ns-mono">{a.ip}/{a.prefix} · gw {a.gateway}</div>
+          {a.kind === 'wifi' && wifiDesc && (
+            <div className="small mt-1 text-truncate" title={wifiDesc}>
+              <span className="text-secondary fw-medium">{wifiDesc}</span>
+            </div>
+          )}
         </div>
         <div className="text-end d-flex flex-column gap-1 align-items-end">
           {active && <span className="ns-pill live">ACTIVE</span>}

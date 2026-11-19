@@ -50,6 +50,149 @@ function ConfigForm({ isAdmin }) {
   );
 }
 
+function SignalBar({ signal }) {
+  const s = Math.max(0, Math.min(100, Number(signal) || 0));
+  const color = s >= 70 ? '#16a34a' : (s >= 40 ? '#d97706' : '#dc2626');
+  return (
+    <div className="d-flex align-items-center gap-2">
+      <div style={{ width: 64, height: 6, backgroundColor: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: `${s}%`, height: '100%', backgroundColor: color }} />
+      </div>
+      <span className="small ns-mono">{s}%</span>
+    </div>
+  );
+}
+
+function WifiNetworksPanel() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    setErr('');
+    try {
+      setData(await api('/api/wifi/status'));
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const cur = data?.current;
+  const saved = data?.savedProfiles || [];
+  const scanned = data?.scannedNetworks || [];
+
+  return (
+    <div className="ns-card p-3 mb-3">
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <h6 className="mb-0">Wi-Fi networks {data?.simulated && <span className="ns-pill sim ms-2">SIMULATED</span>}</h6>
+        <Button size="sm" variant="outline-dark" onClick={load} disabled={loading}>
+          {loading ? 'Refreshing…' : 'Refresh / Scan'}
+        </Button>
+      </div>
+
+      <Alert variant="light" className="border small mb-3">
+        <b>Note:</b> One Wi-Fi radio can join one network at a time. Windows chooses it from the saved-profile order; NetSwitch reports it and switches between adapters.
+      </Alert>
+
+      {err && <Alert variant="danger" className="py-1 small">{err}</Alert>}
+
+      <Row className="g-3">
+        {/* Connected Interface */}
+        <Col md={12} lg={4}>
+          <div className="border rounded p-3 h-100 bg-white">
+            <div className="fw-semibold small text-uppercase text-muted mb-2">Connected Network</div>
+            {cur && cur.state === 'connected' && cur.ssid ? (
+              <div>
+                <div className="h5 mb-1 text-primary fw-bold">{cur.ssid}</div>
+                <div className="d-flex align-items-center gap-2 mb-2">
+                  <span className="ns-pill ok">CONNECTED</span>
+                  <SignalBar signal={cur.signal} />
+                </div>
+                <Table size="sm" className="table-borderless small mb-0">
+                  <tbody>
+                    <tr><td className="text-muted ps-0">Radio &amp; Band</td><td className="ns-mono">{cur.radio || '—'} · {cur.band || '—'} (ch {cur.channel || '—'})</td></tr>
+                    <tr><td className="text-muted ps-0">Link Rates</td><td className="ns-mono">Rx {cur.rxRate || '—'} Mbps / Tx {cur.txRate || '—'} Mbps</td></tr>
+                    <tr><td className="text-muted ps-0">BSSID</td><td className="ns-mono text-truncate" style={{ maxWidth: 140 }}>{cur.bssid || '—'}</td></tr>
+                  </tbody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-muted small py-3">
+                {cur ? 'Wi-Fi interface is disconnected (not associated with an Access Point).' : 'No wireless interface detected on this system.'}
+              </div>
+            )}
+          </div>
+        </Col>
+
+        {/* Saved Profiles */}
+        <Col md={6} lg={4}>
+          <div className="border rounded p-3 h-100 bg-white">
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <span className="fw-semibold small text-uppercase text-muted">Saved Windows Profiles</span>
+              <span className="badge bg-secondary">{saved.length}</span>
+            </div>
+            <p className="text-muted small mb-2" style={{ fontSize: '0.75rem' }}>
+              Windows connects in priority order (top to bottom):
+            </p>
+            {saved.length === 0 ? (
+              <div className="text-muted small py-2">No saved profiles found.</div>
+            ) : (
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                <ol className="ps-3 mb-0 small">
+                  {saved.map((name, i) => (
+                    <li key={`${name}-${i}`} className="py-1">
+                      <span className={cur?.ssid === name ? 'fw-bold text-success' : ''}>{name}</span>
+                      {cur?.ssid === name && <span className="ns-pill live ms-2" style={{ fontSize: '0.65rem' }}>active</span>}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+        </Col>
+
+        {/* Nearby Networks */}
+        <Col md={6} lg={4}>
+          <div className="border rounded p-3 h-100 bg-white">
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <span className="fw-semibold small text-uppercase text-muted">Nearby Scanned Networks</span>
+              <span className="badge bg-secondary">{scanned.length}</span>
+            </div>
+            {scanned.length === 0 ? (
+              <div className="text-muted small py-2">No nearby networks found.</div>
+            ) : (
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                <Table size="sm" className="ns-table mb-0 align-middle">
+                  <thead><tr><th>SSID</th><th>Signal</th><th>Sec</th></tr></thead>
+                  <tbody>
+                    {scanned.map((net, i) => {
+                      const topBss = net.bssids?.[0];
+                      return (
+                        <tr key={`${net.ssid}-${i}`}>
+                          <td className="fw-medium text-truncate" style={{ maxWidth: 120 }}>{net.ssid}</td>
+                          <td><SignalBar signal={topBss?.signal} /></td>
+                          <td className="small text-muted">{net.authentication?.replace('-Personal', '') || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </Col>
+      </Row>
+    </div>
+  );
+}
+
 export default function Control() {
   const { user } = useAuth();
   const { snapshot: s } = useLive();
@@ -87,6 +230,7 @@ export default function Control() {
           {busy ? 'Restoring…' : 'Restore original adapter settings'}
         </Button>
       </div>
+      <WifiNetworksPanel />
       {s.mode === 'sim' ? <SimPanel adapters={s.adapters} /> : (
         <div className="ns-card p-3 mb-3">
           <h6>Testing with Clumsy (Windows)</h6>

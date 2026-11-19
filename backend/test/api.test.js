@@ -74,6 +74,12 @@ test('manual switch, lock, config edit validation, readings query', async () => 
   assert.equal((await call('GET', '/api/readings?interface=../x')).status, 400);
   assert.equal((await call('GET', '/api/interfaces/wifi')).body.subnet.network, '192.168.1.0');
   assert.equal((await call('GET', '/api/wifi/scan')).body.simulated, true);
+  const wifiSt = await call('GET', '/api/wifi/status');
+  assert.equal(wifiSt.status, 200);
+  assert.equal(wifiSt.body.simulated, true);
+  assert.equal(wifiSt.body.current.ssid, 'NetSwitch-Test-AP');
+  assert.ok(Array.isArray(wifiSt.body.savedProfiles));
+  assert.ok(Array.isArray(wifiSt.body.scannedNetworks));
 });
 
 test('REST API integration with MySQL persistence', async () => {

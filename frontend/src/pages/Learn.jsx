@@ -71,6 +71,20 @@ function LoopStepper() {
   );
 }
 
+function WifiArchitectureNote() {
+  return (
+    <div className="ns-card p-3 mb-3">
+      <h6>Wi-Fi single-radio constraint &amp; multi-interface failover</h6>
+      <div className="p-2 border rounded bg-light mb-2 small">
+        <b>Core Architecture Principle:</b> One Wi-Fi radio can join one network at a time. Windows chooses it from the saved-profile order; NetSwitch reports it and switches between adapters.
+      </div>
+      <p className="ns-muted small mb-0">
+        Standard laptop hardware features a single Wi-Fi radio (NIC) tuned to one 802.11 channel and BSSID at a time. Windows connects to the highest-priority saved profile in range. Attempting Layer 2 Wi-Fi re-association during link degradation causes 5–15 seconds of blackout and packet drop. NetSwitch operates at <b>Layer 3 (Network Layer)</b> across independent physical interfaces (Wi-Fi + USB tethering). It probes both paths concurrently and steers traffic seamlessly via Windows route metrics without dropping the 802.11 association.
+      </p>
+    </div>
+  );
+}
+
 export default function Learn() {
-  return (<><h4 className="mb-3">How NetSwitch works</h4><LayerMap /><HandshakeInspector /><LoopStepper /></>);
+  return (<><h4 className="mb-3">How NetSwitch works</h4><LayerMap /><WifiArchitectureNote /><HandshakeInspector /><LoopStepper /></>);
 }

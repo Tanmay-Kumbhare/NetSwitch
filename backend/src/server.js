@@ -11,7 +11,7 @@ import { createRepo } from './db/index.js';
 import { makeAuth, httpErr } from './auth.js';
 import { WinController } from './control/winController.js';
 import { SimController } from './control/simController.js';
-import { scanWifi } from './windows/wifiScan.js';
+import { scanWifi, getWifiStatus } from './windows/wifiScan.js';
 import { subnetInfo } from './core/subnet.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -77,6 +77,10 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   app.get('/api/wifi/scan', any, wrap(async (req, res) => {
     if (mode === 'sim') return res.json({ simulated: true, networks: [{ ssid: 'NetSwitch-Test-AP (sim)', authentication: 'WPA3-Personal', encryption: 'CCMP', bssids: [{ bssid: '02:00:00:00:00:01', signal: 97, radio: '802.11ax', band: '5 GHz', channel: 36 }] }] });
     try { res.json({ simulated: false, networks: await scanWifi() }); } catch (e) { throw httpErr(503, `scan unavailable: ${e.message}`); }
+  }));
+  // read-only Wi-Fi awareness (current interface, profiles, scan)
+  app.get('/api/wifi/status', any, wrap(async (req, res) => {
+    try { res.json(await getWifiStatus({ mode })); } catch (e) { throw httpErr(503, `Wi-Fi status unavailable: ${e.message}`); }
   }));
   // sim-only fault injection (the Windows demo uses Clumsy instead)
   if (mode === 'sim') {

@@ -6,6 +6,7 @@ import { decide, initialState } from './core/decide.js';
 import { subnetInfo } from './core/subnet.js';
 import { RealProbeDriver } from './probes/driver.js';
 import { SimProbeDriver } from './probes/simDriver.js';
+import { showInterfaces, SIMULATED_WIFI_STATUS } from './windows/wifiScan.js';
 
 const FAIL_COOLDOWN_MS = 5000;
 
@@ -82,6 +83,10 @@ export class Agent extends EventEmitter {
     }
     a.driver = this.#makeDriver(a);
     a.driver.start();
+    if (a.kind === 'wifi') {
+      if (this.mode === 'sim') a.wifi = SIMULATED_WIFI_STATUS.current;
+      else showInterfaces().then((info) => { if (info) a.wifi = info; }).catch(() => {});
+    }
     this.adapters.set(a.id, a);
     await this.repo.upsertInterface(a).catch((e) => this.log('[db] upsertInterface', e.message));
     this.log(`[agent] adapter ${a.id}: ${a.alias} ${a.ip} gw ${a.gateway} metric ${a.metric} eligible=${a.eligible} pathVerified=${a.pathVerified}${a.pinNote ? ' (' + a.pinNote + ')' : ''}`);
@@ -151,6 +156,10 @@ export class Agent extends EventEmitter {
       a.up = true;
       a.currentMetric = d.metric;
       a.metric = d.metric;
+      if (a.kind === 'wifi') {
+        if (this.mode === 'sim') a.wifi = SIMULATED_WIFI_STATUS.current;
+        else showInterfaces().then((info) => { if (info) a.wifi = info; }).catch(() => {});
+      }
 
       if (a.ip !== d.ip || a.gateway !== d.gateway || a.index !== d.index) { // address or index changed: rebuild probes and pins
         this.log(`[agent] ${a.id} changed address/gateway/index; re-pinning and rebuilding driver`);
@@ -206,7 +215,8 @@ export class Agent extends EventEmitter {
       view.push({ id: a.id, kind: a.kind, eligible: isEligible, alias: a.alias, description: a.description, index: a.index, ip: a.ip, prefix: a.prefix, gateway: a.gateway, network: net?.network ?? null,
         metric: a.currentMetric, up: a.up, band, score: a.up ? m.result.score : null, lossPct: m.stats.lossPct, rttMs: m.stats.medianRtt, lastRttMs: m.stats.lastRtt, jitterMs: m.stats.jitter,
         tcpMs: m.tcp?.ok ? m.tcp.ms : null, tcpOk: m.tcpFresh ? m.tcp.ok : null, consecutiveLost: m.stats.consecutiveLost, samples: m.stats.sent,
-        udpFiltered: m.udpFiltered, parts: m.result.parts, missing: m.result.missing, pathVerified: a.pathVerified, pinError: a.pinError, pinNote: a.pinNote || null, targets: this.mode === 'sim' ? [] : this.#targets(a) });
+        udpFiltered: m.udpFiltered, parts: m.result.parts, missing: m.result.missing, pathVerified: a.pathVerified, pinError: a.pinError, pinNote: a.pinNote || null, targets: this.mode === 'sim' ? [] : this.#targets(a),
+        wifi: a.wifi || null });
     }
     if (this.failoverEnabled && this.autoFailoverEnabled && this.state && this.canControl && !this.switching && this.state.activeId) {
       if (now >= this.failCooldownUntil) {

@@ -30,12 +30,16 @@ function formatTimeSince(ts, nowMs) {
 export default function Dashboard() {
   const { snapshot: s, series, events, status } = useLive();
   const [cfg, setCfg] = useState(null);
+  const [wifiStatus, setWifiStatus] = useState(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     let on = true;
     api('/api/config').then((c) => on && setCfg(c)).catch(() => {});
-    return () => { on = false; };
+    const loadWifi = () => api('/api/wifi/status').then((w) => on && setWifiStatus(w)).catch(() => {});
+    loadWifi();
+    const t = setInterval(loadWifi, 10000);
+    return () => { on = false; clearInterval(t); };
   }, []);
 
   useEffect(() => {
@@ -166,6 +170,7 @@ export default function Dashboard() {
                 active={a.id === s.activeId}
                 pinningEnabled={s.probeRoutePinning}
                 scoreConfig={scoreCfg}
+                wifiStatus={wifiStatus}
               />
             </Col>
           ))}
