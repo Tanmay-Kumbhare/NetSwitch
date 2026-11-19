@@ -1,0 +1,990 @@
+{
+  "info": {
+    "_postman_id": "b3e0c7a4-8451-4d1a-9824-7f129a0fbc51",
+    "name": "NetSwitch REST API Test Suite",
+    "description": "Comprehensive Postman API test collection for NetSwitch - Dual-NIC Multi-Adapter Health Probing & Seamless Failover System. Covers Unit V (Postman API Testing & REST APIs) and Unit VI (Node.js/Express) of the CNT Syllabus.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:4000",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@netswitch.local",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "AdminPass123!",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - System Health & Public Endpoints",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"System health status is ok: true\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.ok).to.eql(true);",
+                  "    pm.expect(json).to.have.property('time');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Unauthenticated health endpoint to verify agent and HTTP server are responsive."
+          }
+        },
+        {
+          "name": "Get Demo Scenarios List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns 5 supported in-memory scenarios\", function () {",
+                  "    var scenarios = pm.response.json();",
+                  "    pm.expect(scenarios).to.be.an('array');",
+                  "    pm.expect(scenarios.length).to.eql(5);",
+                  "    var ids = scenarios.map(s => s.id);",
+                  "    pm.expect(ids).to.include('degradation');",
+                  "    pm.expect(ids).to.include('hard_failure');",
+                  "    pm.expect(ids).to.include('flapping');",
+                  "    pm.expect(ids).to.include('recovery_switch_back');",
+                  "    pm.expect(ids).to.include('no_internet');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/scenarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "scenarios"]
+            },
+            "description": "Returns metadata for all 5 algorithmic failover scenarios."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Authentication & Authorization",
+      "item": [
+        {
+          "name": "Register Admin User (Bootstrap)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created or 409 Conflict (Already registered)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.test(\"Returns JWT token and user info\", function () {",
+                  "        pm.expect(json).to.have.property('token');",
+                  "        pm.expect(json.user).to.have.property('email');",
+                  "        pm.collectionVariables.set(\"jwtToken\", json.token);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"name\": \"NetSwitch Admin\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Registers the initial admin user. The first user created automatically receives the admin role."
+          }
+        },
+        {
+          "name": "Login (Extract JWT Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns valid JWT token and sets collection variable\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('token');",
+                  "    pm.expect(json.token.split('.').length).to.eql(3); // JWT 3-part structure",
+                  "    pm.expect(json.user).to.have.property('role');",
+                  "    pm.collectionVariables.set(\"jwtToken\", json.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Logs in and stores the signed JWT token into {{jwtToken}} for all subsequent authenticated requests."
+          }
+        },
+        {
+          "name": "Get Current User Profile (Me)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"JWT token correctly decoded by auth middleware\", function () {",
+                  "    var user = pm.response.json();",
+                  "    pm.expect(user).to.have.property('email');",
+                  "    pm.expect(user).to.have.property('role');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Verifies JWT authentication and retrieves user identity."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Interfaces & Live Readings",
+      "item": [
+        {
+          "name": "List Discovered Interfaces",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Snapshot contains activeId and adapter list\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('adapters');",
+                  "    pm.expect(json.adapters).to.be.an('array');",
+                  "    pm.expect(json).to.have.property('activeId');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/interfaces",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "interfaces"]
+            },
+            "description": "Fetches current snapshot of all physical network adapters, metrics, and health scores."
+          }
+        },
+        {
+          "name": "Get Specific Adapter Detail (Wi-Fi)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns adapter details and computed subnet CIDR info\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('adapter');",
+                  "    pm.expect(json).to.have.property('subnet');",
+                  "    pm.expect(json.subnet).to.have.property('network');",
+                  "    pm.expect(json.subnet).to.have.property('broadcast');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/interfaces/wifi",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "interfaces", "wifi"]
+            },
+            "description": "Inspects single adapter details along with bit-level IPv4 subnet boundary calculations."
+          }
+        },
+        {
+          "name": "Query Historical Aggregated Readings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns SQL query note and time-bucketed rows\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('rows');",
+                  "    pm.expect(json.rows).to.be.an('array');",
+                  "    pm.expect(json).to.have.property('sql');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/readings?interface=wifi&minutes=15",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "readings"],
+              "query": [
+                {
+                  "key": "interface",
+                  "value": "wifi"
+                },
+                {
+                  "key": "minutes",
+                  "value": "15"
+                }
+              ]
+            },
+            "description": "Retrieves downsampled 5-second historical telemetry buckets from MySQL."
+          }
+        },
+        {
+          "name": "List Failover Events Audit Log",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns array of failover audit logs\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/failovers?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "failovers"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Fetches audit records of automated and manual interface switches."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Wi-Fi Intelligence & Advisor",
+      "item": [
+        {
+          "name": "Scan Nearby Wi-Fi Networks",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns scanned networks with BSSIDs\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('networks');",
+                  "    pm.expect(json.networks).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/wifi/scan",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wifi", "scan"]
+            },
+            "description": "Triggers read-only netsh wlan show networks and returns all visible access points."
+          }
+        },
+        {
+          "name": "Get Wi-Fi Status & Saved Profiles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns current interface, saved profiles, and scan results\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('savedProfiles');",
+                  "    pm.expect(json.savedProfiles).to.be.an('array');",
+                  "    pm.expect(json).to.have.property('scannedNetworks');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/wifi/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wifi", "status"]
+            },
+            "description": "Returns current Wi-Fi adapter connection details and Windows profile priority order."
+          }
+        },
+        {
+          "name": "Get Wi-Fi Advisor Recommendations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Advisor returns windowsLikelyPick and recommended network\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('windowsLikelyPick');",
+                  "    pm.expect(json).to.have.property('recommended');",
+                  "    pm.expect(json.networks).to.be.an('array');",
+                  "    if (json.networks.length > 0) {",
+                  "        pm.expect(json.networks[0]).to.have.property('predictedRating');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/wifi/advisor",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wifi", "advisor"]
+            },
+            "description": "Intersects saved profiles with scanned networks and computes mathematical ratings (0.7*history + 0.3*signal)."
+          }
+        },
+        {
+          "name": "Manual Wi-Fi Connect (Admin Only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK or 400 Bad Request (profile must be saved)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.ok).to.eql(true);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile\": \"NetSwitch-Test-AP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wifi/connect",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wifi", "connect"]
+            },
+            "description": "Admin action executing safe netsh wlan connect for a saved profile."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - In-Memory Simulation (Demo Scenarios)",
+      "item": [
+        {
+          "name": "Run Scenario 1 - Gradual Wi-Fi Degradation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Simulation runs in memory and triggers failover\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.timeline).to.be.an('array');",
+                  "    var switches = json.timeline.filter(t => t.action);",
+                  "    pm.expect(switches.length).to.be.above(0);",
+                  "    pm.expect(switches[0].action.reason).to.eql('degradation');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"degradation\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "run"]
+            },
+            "description": "Simulates gradual Wi-Fi packet loss/latency degradation and switching after margin + 5 checks."
+          }
+        },
+        {
+          "name": "Run Scenario 2 - Sudden Hard Failure",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Triggers immediate hard_failure switch at second 3\", function () {",
+                  "    var json = pm.response.json();",
+                  "    var switchFrame = json.timeline.find(t => t.action);",
+                  "    pm.expect(switchFrame).to.be.an('object');",
+                  "    pm.expect(switchFrame.action.reason).to.eql('hard_failure');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"hard_failure\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "run"]
+            },
+            "description": "Simulates 15 lost UDP probes + TCP failure triggering immediate failover."
+          }
+        },
+        {
+          "name": "Run Scenario 3 - Flapping Hold-down",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Hold-down timer suppresses rapid oscillating switches\", function () {",
+                  "    var json = pm.response.json();",
+                  "    var holdDownFrames = json.timeline.filter(t => t.phase === 'HOLD_DOWN');",
+                  "    pm.expect(holdDownFrames.length).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"flapping\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "run"]
+            },
+            "description": "Demonstrates hold-down suppression preventing switch storms on oscillating link."
+          }
+        },
+        {
+          "name": "Run Scenario 4 - Recovery and Switch-back",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Switches back to preferred Wi-Fi adapter after 10 healthy evaluations\", function () {",
+                  "    var json = pm.response.json();",
+                  "    var sbFrame = json.timeline.find(t => t.action && t.action.reason === 'switch_back');",
+                  "    pm.expect(sbFrame).to.be.an('object');",
+                  "    pm.expect(sbFrame.action.to).to.eql('wifi');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"recovery_switch_back\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "run"]
+            },
+            "description": "Tests recovery evaluation and graceful return to preferred link."
+          }
+        },
+        {
+          "name": "Run Scenario 5 - Dual Link Failure (NO_INTERNET)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Enters NO_INTERNET state without switching to degraded link\", function () {",
+                  "    var json = pm.response.json();",
+                  "    var noInternetFrames = json.timeline.filter(t => t.phase === 'NO_INTERNET');",
+                  "    pm.expect(noInternetFrames.length).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"no_internet\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "run"]
+            },
+            "description": "Validates guard behavior when both links fail."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Configuration & Control (Admin Only)",
+      "item": [
+        {
+          "name": "Get Config",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns decision thresholds and score weights\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('decide');",
+                  "    pm.expect(json).to.have.property('score');",
+                  "    pm.expect(json.decide).to.have.property('degradeMargin');",
+                  "    pm.expect(json.score).to.have.property('weights');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "config"]
+            },
+            "description": "Retrieves active scoring weights and decision margins."
+          }
+        },
+        {
+          "name": "Update Config Margins",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Updated config persisted and returned\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.decide.degradeChecks).to.eql(5);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decide\": {\n    \"degradeChecks\": 5,\n    \"degradeMargin\": 20\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "config"]
+            },
+            "description": "Updates runtime decision parameters."
+          }
+        },
+        {
+          "name": "Restore Original Settings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK or 422 if control disabled\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 422]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwtToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/control/restore",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "control", "restore"]
+            },
+            "description": "Restores original Windows adapter metrics recorded in state file."
+          }
+        }
+      ]
+    }
+  ]
+}
