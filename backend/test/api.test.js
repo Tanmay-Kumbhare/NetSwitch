@@ -80,6 +80,16 @@ test('manual switch, lock, config edit validation, readings query', async () => 
   assert.equal(wifiSt.body.current.ssid, 'NetSwitch-Test-AP');
   assert.ok(Array.isArray(wifiSt.body.savedProfiles));
   assert.ok(Array.isArray(wifiSt.body.scannedNetworks));
+
+  assert.equal((await call('GET', '/api/wifi/advisor', null, null)).status, 401);
+  const adv = await call('GET', '/api/wifi/advisor');
+  assert.equal(adv.status, 200);
+  assert.equal(adv.body.simulated, true);
+  assert.ok(adv.body.windowsLikelyPick);
+  assert.ok(adv.body.recommended);
+  assert.ok(Array.isArray(adv.body.networks));
+  assert.ok(adv.body.networks.length >= 2);
+  assert.ok(adv.body.networks[0].predictedRating != null);
 });
 
 test('REST API integration with MySQL persistence', async () => {

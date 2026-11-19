@@ -35,7 +35,20 @@ export class MemoryRepo {
   }
   async insertFailover(e) { this.failovers.unshift({ id: this.failovers.length + 1, ...e }); }
   async listFailovers(limit = 50) { return this.failovers.slice(0, limit); }
-  async getConfig() { return this.config; }
-  async setConfig(c) { this.config = c; }
+  async getConfig(k = 'runtime') {
+    return this.config[k] ?? {};
+  }
+  async setConfig(arg1, arg2 = 'runtime') {
+    let key = 'runtime';
+    let val = arg1;
+    if (typeof arg1 === 'string' && arg2 !== 'runtime') {
+      key = arg1;
+      val = arg2;
+    } else if (typeof arg2 === 'string') {
+      key = arg2;
+      val = arg1;
+    }
+    this.config[key] = val;
+  }
   async close() {}
 }

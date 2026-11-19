@@ -97,6 +97,7 @@ export class Agent extends EventEmitter {
     this.recoveryPending = !!this.controller.recoveryPending;
     const saved = await this.repo.getConfig().catch(() => ({}));
     this.cfg = mergeConfig(this.cfg, saved);
+    this.wifiStats = (await this.repo.getConfig('wifi_ssid_stats').catch(() => ({}))) || {};
     const found = await this.controller.discover();
     for (const d of found) await this.#addAdapter(d);
     const up = [...this.adapters.values()].sort((x, y) => x.metric - y.metric);
@@ -183,6 +184,33 @@ export class Agent extends EventEmitter {
         this.state = { ...this.state, activeId: observed.id };
       }
     }
+    await this.#updateWifiStats().catch(() => {});
+  }
+
+  async #updateWifiStats() {
+    const wifi = [...this.adapters.values()].find((a) => a.kind === 'wifi');
+    if (!wifi || !wifi.up) return;
+    const cur = wifi.wifi || (this.mode === 'sim' ? SIMULATED_WIFI_STATUS.current : null);
+    if (!cur || cur.state !== 'connected' || !cur.ssid) return;
+
+    const score = wifi.m?.result?.score;
+    if (typeof score !== 'number' || isNaN(score)) return;
+
+    const ssid = cur.ssid;
+    if (!this.wifiStats) {
+      this.wifiStats = (await this.repo.getConfig('wifi_ssid_stats').catch(() => ({}))) || {};
+    }
+    const prev = this.wifiStats[ssid] || { avgScore: 0, samples: 0, lastSeen: null };
+    const samples = (prev.samples || 0) + 1;
+    const avgScore = Math.round((((prev.avgScore || 0) * (prev.samples || 0) + score) / samples) * 10) / 10;
+    this.wifiStats[ssid] = {
+      avgScore,
+      samples,
+      lastSeen: new Date().toISOString(),
+    };
+    await this.repo.setConfig(this.wifiStats, 'wifi_ssid_stats').catch((err) => {
+      this.log(`[agent] failed to persist wifi_ssid_stats: ${err.message}`);
+    });
   }
 
   #measure(a, now) {

@@ -257,5 +257,11 @@ test('12. Explicit memory mode operation', async () => {
   await memRepo.setConfig({ testKey: 123 });
   assert.deepEqual(await memRepo.getConfig(), { testKey: 123 });
 
+  const wifiStats = {
+    'NetSwitch-Test-AP': { avgScore: 88.5, samples: 20, lastSeen: '2026-11-19T10:00:00Z' },
+  };
+  await memRepo.setConfig(wifiStats, 'wifi_ssid_stats');
+  assert.deepEqual(await memRepo.getConfig('wifi_ssid_stats'), wifiStats);
+
   await memRepo.close();
 });

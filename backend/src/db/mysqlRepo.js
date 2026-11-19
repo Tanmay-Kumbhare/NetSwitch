@@ -226,16 +226,25 @@ export class MysqlRepo {
     }));
   }
 
-  async getConfig() {
-    const [rows] = await this.pool.query("SELECT v FROM config WHERE k = 'runtime'");
+  async getConfig(k = 'runtime') {
+    const [rows] = await this.pool.query("SELECT v FROM config WHERE k = ?", [k]);
     const v = rows[0]?.v;
     return v == null ? {} : typeof v === 'string' ? JSON.parse(v) : v;
   }
 
-  async setConfig(c) {
+  async setConfig(arg1, arg2 = 'runtime') {
+    let key = 'runtime';
+    let val = arg1;
+    if (typeof arg1 === 'string' && arg2 !== 'runtime') {
+      key = arg1;
+      val = arg2;
+    } else if (typeof arg2 === 'string') {
+      key = arg2;
+      val = arg1;
+    }
     await this.pool.execute(
-      "INSERT INTO config (k, v) VALUES ('runtime', ?) ON DUPLICATE KEY UPDATE v = VALUES(v)",
-      [JSON.stringify(c)]
+      "INSERT INTO config (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)",
+      [key, JSON.stringify(val)]
     );
   }
 

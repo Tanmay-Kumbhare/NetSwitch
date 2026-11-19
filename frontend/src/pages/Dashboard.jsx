@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Col, Row, Spinner } from 'react-bootstrap';
+import { Alert, Col, Row, Spinner, Table } from 'react-bootstrap';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
 import { useLive } from '../live.jsx';
 import { api } from '../api.js';
@@ -31,14 +31,20 @@ export default function Dashboard() {
   const { snapshot: s, series, events, status } = useLive();
   const [cfg, setCfg] = useState(null);
   const [wifiStatus, setWifiStatus] = useState(null);
+  const [wifiAdvisor, setWifiAdvisor] = useState(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     let on = true;
     api('/api/config').then((c) => on && setCfg(c)).catch(() => {});
     const loadWifi = () => api('/api/wifi/status').then((w) => on && setWifiStatus(w)).catch(() => {});
+    const loadAdvisor = () => api('/api/wifi/advisor').then((a) => on && setWifiAdvisor(a)).catch(() => {});
     loadWifi();
-    const t = setInterval(loadWifi, 10000);
+    loadAdvisor();
+    const t = setInterval(() => {
+      loadWifi();
+      loadAdvisor();
+    }, 10000);
     return () => { on = false; clearInterval(t); };
   }, []);
 
@@ -175,6 +181,116 @@ export default function Dashboard() {
             </Col>
           ))}
         </Row>
+      )}
+
+      {/* 3. Wi-Fi Advisor Card */}
+      {wifiAdvisor && (
+        <div className="ns-card p-3 mb-3">
+          <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div className="d-flex align-items-center gap-2">
+              <span className="fw-bold fs-6">Wi-Fi Advisor</span>
+              <span className="ns-pill ok">Intelligent Network Selection</span>
+              {wifiAdvisor.simulated && <span className="ns-pill sim">SIMULATED</span>}
+            </div>
+            {wifiAdvisor.current?.ssid && (
+              <div className="small text-muted">
+                Current: <b className="text-dark">{wifiAdvisor.current.ssid}</b>{wifiAdvisor.current.signal != null ? ` · ${wifiAdvisor.current.signal}% signal` : ''}{wifiAdvisor.current.band ? ` · ${wifiAdvisor.current.band}` : ''}
+                {wifiAdvisor.current.measuredScore != null && (
+                  <> · measured score <b className="text-primary">{wifiAdvisor.current.measuredScore}</b></>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Windows Likely Pick vs NetSwitch Recommendation */}
+          <div className="p-2 px-3 rounded bg-light border mb-2 d-flex flex-wrap align-items-center justify-content-between gap-2 small">
+            <div>
+              <span className="text-muted">Windows will likely pick:</span>{' '}
+              <span className="fw-bold text-dark">{wifiAdvisor.windowsLikelyPick || 'None in range'}</span>
+              <span className="mx-2 text-muted">;</span>
+              <span className="text-muted">NetSwitch recommends:</span>{' '}
+              <span className="fw-bold text-success">{wifiAdvisor.recommended || 'None in range'}</span>
+            </div>
+            {wifiAdvisor.windowsLikelyPick && wifiAdvisor.recommended && (
+              wifiAdvisor.windowsLikelyPick === wifiAdvisor.recommended ? (
+                <span className="badge bg-success-subtle text-success border border-success-subtle">
+                  ✓ Aligned with Windows Default
+                </span>
+              ) : (
+                <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                  ⚡ NetSwitch Recommends Better Link
+                </span>
+              )
+            )}
+          </div>
+
+          {/* In-Range Saved Networks Sorted by Predicted Rating */}
+          {(!wifiAdvisor.networks || wifiAdvisor.networks.length === 0) ? (
+            <div className="text-muted small py-2 text-center">
+              No saved Wi-Fi profiles currently detected in range.
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <Table size="sm" className="ns-table mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th>Network (SSID)</th>
+                    <th>Signal</th>
+                    <th>Band / Radio</th>
+                    <th>Measured Avg Score</th>
+                    <th>Predicted Rating</th>
+                    <th>Advisor Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {wifiAdvisor.networks.map((net) => {
+                    const isConnected = wifiAdvisor.current?.ssid === net.ssid;
+                    const isRecommended = wifiAdvisor.recommended === net.ssid;
+                    const isWinPick = wifiAdvisor.windowsLikelyPick === net.ssid;
+                    return (
+                      <tr key={net.ssid} className={isRecommended ? 'table-light' : ''}>
+                        <td className="fw-medium">
+                          {net.ssid}
+                          {isConnected && <span className="ns-pill live ms-2" style={{ fontSize: '0.65rem' }}>CONNECTED</span>}
+                        </td>
+                        <td>
+                          <div className="d-flex align-items-center gap-2">
+                            <div className="progress flex-grow-1" style={{ height: 6, minWidth: 60, maxWidth: 100 }}>
+                              <div
+                                className={`progress-bar ${net.signal >= 75 ? 'bg-success' : net.signal >= 45 ? 'bg-warning' : 'bg-danger'}`}
+                                style={{ width: `${net.signal || 0}%` }}
+                              />
+                            </div>
+                            <span className="ns-mono small">{net.signal ?? '—'}%</span>
+                          </div>
+                        </td>
+                        <td className="small text-muted">{net.band || '—'}{net.channel ? ` (ch ${net.channel})` : ''}</td>
+                        <td className="ns-mono small">
+                          {net.measuredScore != null ? (
+                            <span><b>{net.measuredScore}</b> <span className="text-muted">({net.samples} checks)</span></span>
+                          ) : (
+                            <span className="text-muted">No history</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="badge bg-primary px-2 py-1">
+                            {net.predictedRating} predicted
+                          </span>
+                        </td>
+                        <td>
+                          <div className="d-flex gap-1 flex-wrap">
+                            {isRecommended && <span className="ns-pill ok">RECOMMENDED</span>}
+                            {isWinPick && <span className="ns-pill off">WINDOWS PICK</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 4. Legend under the gauges */}

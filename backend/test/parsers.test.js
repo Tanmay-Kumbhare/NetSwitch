@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseNetsh, parseInterfaces, parseProfiles, getWifiStatus } from '../src/windows/wifiScan.js';
+import { parseNetsh, parseInterfaces, parseProfiles, getWifiStatus, computeWifiAdvisor } from '../src/windows/wifiScan.js';
 import { toAdapters, classify } from '../src/windows/discovery.js';
 import { parsePing } from '../src/probes/icmp.js';
 import { buildQuery, parseResponse } from '../src/probes/dnsPacket.js';
@@ -109,6 +109,99 @@ test('getWifiStatus returns simulated payload in sim mode', async () => {
   assert.equal(st.current.state, 'connected');
   assert.ok(Array.isArray(st.savedProfiles));
   assert.ok(Array.isArray(st.scannedNetworks));
+});
+
+test('computeWifiAdvisor intersects saved+in-range networks and calculates predicted ratings', () => {
+  const savedProfiles = ['Campus_Fast_5G', 'Legacy_2G', 'Cafe_5G', 'Not_Present_SSID'];
+  const scannedNetworks = [
+    {
+      ssid: 'Campus_Fast_5G',
+      bssids: [{ bssid: '01', signal: 85, band: '5 GHz', channel: 36 }],
+    },
+    {
+      ssid: 'Legacy_2G',
+      bssids: [{ bssid: '02', signal: 70, band: '2.4 GHz', channel: 6 }],
+    },
+    {
+      ssid: 'Cafe_5G',
+      bssids: [{ bssid: '03', signal: 80, band: '5 GHz', channel: 149 }],
+    },
+    {
+      ssid: 'Stranger_Network',
+      bssids: [{ bssid: '04', signal: 99, band: '5 GHz', channel: 44 }],
+    },
+  ];
+  const historyStats = {
+    // 0.7 * 92 + 0.3 * 85 = 64.4 + 25.5 = 89.9
+    Campus_Fast_5G: { avgScore: 92.0, samples: 30, lastSeen: '2026-11-19T10:00:00Z' },
+    // 0.7 * 50 + 0.3 * 70 = 35.0 + 21.0 = 56.0
+    Legacy_2G: { avgScore: 50.0, samples: 10, lastSeen: '2026-11-19T09:00:00Z' },
+    // Cafe_5G has no history: 80 + 5 (5GHz bonus) = 85.0
+  };
+
+  const res = computeWifiAdvisor({
+    current: { ssid: 'Campus_Fast_5G', state: 'connected', signal: 85, band: '5 GHz' },
+    savedProfiles,
+    scannedNetworks,
+    historyStats,
+  });
+
+  assert.equal(res.current.ssid, 'Campus_Fast_5G');
+  assert.equal(res.current.measuredScore, 92.0);
+  assert.equal(res.networks.length, 3); // excludes Stranger_Network (not saved) and Not_Present_SSID (not in range)
+
+  // Verify sorting by predicted rating descending
+  // 1: Campus_Fast_5G (89.9)
+  // 2: Cafe_5G (85.0)
+  // 3: Legacy_2G (56.0)
+  assert.equal(res.networks[0].ssid, 'Campus_Fast_5G');
+  assert.equal(res.networks[0].predictedRating, 89.9);
+  assert.equal(res.networks[0].hasHistory, true);
+
+  assert.equal(res.networks[1].ssid, 'Cafe_5G');
+  assert.equal(res.networks[1].predictedRating, 85.0);
+  assert.equal(res.networks[1].hasHistory, false);
+
+  assert.equal(res.networks[2].ssid, 'Legacy_2G');
+  assert.equal(res.networks[2].predictedRating, 56.0);
+
+  // windowsLikelyPick is the first saved profile in priority order that is in range
+  assert.equal(res.windowsLikelyPick, 'Campus_Fast_5G');
+  // recommended is the highest predicted rating
+  assert.equal(res.recommended, 'Campus_Fast_5G');
+});
+
+test('computeWifiAdvisor identifies when Windows likely pick differs from NetSwitch recommended', () => {
+  // Windows priority order has Weak_Default first, but Strong_Fiber has higher quality/score
+  const savedProfiles = ['Weak_Default', 'Strong_Fiber'];
+  const scannedNetworks = [
+    {
+      ssid: 'Weak_Default',
+      bssids: [{ bssid: '01', signal: 50, band: '2.4 GHz', channel: 1 }],
+    },
+    {
+      ssid: 'Strong_Fiber',
+      bssids: [{ bssid: '02', signal: 95, band: '5 GHz', channel: 36 }],
+    },
+  ];
+  const historyStats = {
+    // 0.7 * 96 + 0.3 * 95 = 67.2 + 28.5 = 95.7
+    Strong_Fiber: { avgScore: 96.0, samples: 50, lastSeen: '2026-11-19T10:00:00Z' },
+  };
+
+  const res = computeWifiAdvisor({ savedProfiles, scannedNetworks, historyStats });
+  // Windows would pick Weak_Default because it is #0 in saved profile priority
+  assert.equal(res.windowsLikelyPick, 'Weak_Default');
+  // NetSwitch recommends Strong_Fiber because rating is 95.7 vs 50.0
+  assert.equal(res.recommended, 'Strong_Fiber');
+});
+
+test('computeWifiAdvisor handles empty and null inputs safely', () => {
+  const empty = computeWifiAdvisor({});
+  assert.equal(empty.current, null);
+  assert.deepEqual(empty.networks, []);
+  assert.equal(empty.windowsLikelyPick, null);
+  assert.equal(empty.recommended, null);
 });
 
 test('adapter classification and ids', () => {

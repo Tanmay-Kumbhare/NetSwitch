@@ -11,7 +11,7 @@ import { createRepo } from './db/index.js';
 import { makeAuth, httpErr } from './auth.js';
 import { WinController } from './control/winController.js';
 import { SimController } from './control/simController.js';
-import { scanWifi, getWifiStatus } from './windows/wifiScan.js';
+import { scanWifi, getWifiStatus, computeWifiAdvisor, SIMULATED_WIFI_HISTORY } from './windows/wifiScan.js';
 import { runDemoScenario, SCENARIO_DEFS } from './core/demo.js';
 import { subnetInfo } from './core/subnet.js';
 
@@ -82,6 +82,30 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   // read-only Wi-Fi awareness (current interface, profiles, scan)
   app.get('/api/wifi/status', any, wrap(async (req, res) => {
     try { res.json(await getWifiStatus({ mode })); } catch (e) { throw httpErr(503, `Wi-Fi status unavailable: ${e.message}`); }
+  }));
+  // read-only Wi-Fi advisor (intersects saved profiles with scanned networks & historical ratings)
+  app.get('/api/wifi/advisor', any, wrap(async (req, res) => {
+    try {
+      const stats = (await repo.getConfig('wifi_ssid_stats').catch(() => ({}))) || {};
+      const status = await getWifiStatus({ mode });
+      const wifiAdapter = [...agent.adapters.values()].find((a) => a.kind === 'wifi');
+      const liveScore = wifiAdapter?.m?.result?.score ?? null;
+      const history = (mode === 'sim' && (!stats || Object.keys(stats).length === 0))
+        ? SIMULATED_WIFI_HISTORY
+        : stats;
+      const advisor = computeWifiAdvisor({
+        current: status.current ? { ...status.current, score: liveScore } : null,
+        savedProfiles: status.savedProfiles,
+        scannedNetworks: status.scannedNetworks,
+        historyStats: history,
+      });
+      res.json({
+        simulated: mode === 'sim',
+        ...advisor,
+      });
+    } catch (e) {
+      throw httpErr(503, `Wi-Fi advisor unavailable: ${e.message}`);
+    }
   }));
   // in-memory demo scenarios: pure simulation, zero OS mutations or database writes
   app.get('/api/demo/scenarios', any, (req, res) => {
