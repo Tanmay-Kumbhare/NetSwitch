@@ -33,7 +33,7 @@ function Sockets() {
       </Card>
       <div className="row g-3">
         <div className="col-lg-6"><Card title="TCP client → TCP server (Berkeley sockets, connection-oriented)">
-          <Why>Unit-III & Practical 3a: TCP Berkeley socket client/server (Hello & file transfer). TCP is used here because every command needs a reliable, ordered reply, and files must arrive complete.</Why>
+          <Why>Practical 3a: hello and file transfer. TCP is used here because every command needs a reliable, ordered reply, and a file must arrive complete.</Why>
           <Form.Control as="textarea" rows={4} className="ns-mono mb-2" value={cmds} onChange={(e) => setCmds(e.target.value)} />
           <Button size="sm" disabled={t.busy} onClick={async () => setTcp(await t.call('/api/lab/tcp', { commands: cmds.split('\n').map((x) => x.trim()).filter(Boolean) }))}>Run on one connection</Button>
           <Err e={t.err} />
@@ -42,7 +42,7 @@ function Sockets() {
             {tcp.replies.filter((r) => r.body).map((r, i) => <pre key={i} className="ns-pre">{r.body}</pre>)}</>}
         </Card></div>
         <div className="col-lg-6"><Card title="UDP client → UDP server (connectionless datagrams)">
-          <Why>Unit-III & Practical 3b: UDP Berkeley socket client/server (Hello & trigonometric calculator). UDP is used because one small request needs one small reply with zero handshake overhead.</Why>
+          <Why>Practical 3b: trigonometric calculator. UDP is used because one small request needs one small reply, with no handshake. If a datagram is lost, nobody retransmits.</Why>
           <div className="d-flex gap-2 mb-2"><Form.Control size="sm" className="ns-mono" value={msg} onChange={(e) => setMsg(e.target.value)} />
             <Button size="sm" disabled={u.busy} onClick={async () => setUdp(await u.call('/api/lab/udp', { message: msg }))}>Send</Button></div>
           <div className="d-flex gap-1 flex-wrap mb-2">{['sin 30', 'cos 60', 'tan 45', 'sqrt 144', 'log 1000', 'hello Tanmay', 'primes 2000000'].map((x) => <Button key={x} size="sm" variant="outline-dark" onClick={() => setMsg(x)}>{x}</Button>)}</div>
@@ -70,7 +70,7 @@ function Threads() {
   return (
     <>
       <Card title="Concurrent clients (the 'multithreaded server' question)">
-        <Why>Unit-VI (Node.js & OS Concurrency): Node runs JavaScript on a single-threaded event loop with I/O multiplexing (IOCP on Windows / epoll on Linux), while CPU-heavy work (PRIME) is offloaded to worker threads (OS threads) without blocking the loop.</Why>
+        <Why>Node runs JavaScript on one thread, but the operating system multiplexes many sockets (epoll/IOCP) so many clients are served at the same time. CPU-heavy work (PRIME) is sent to real worker threads, so one heavy request cannot freeze the others.</Why>
         <div className="d-flex gap-2 align-items-end flex-wrap">
           <Form.Group><Form.Label className="small mb-0">Clients</Form.Label><Form.Select size="sm" value={n} onChange={(e) => setN(Number(e.target.value))}>{[1, 2, 3, 5, 8, 10].map((x) => <option key={x}>{x}</option>)}</Form.Select></Form.Group>
           <Form.Group><Form.Label className="small mb-0">Each client sends</Form.Label><Form.Select size="sm" value={cmd} onChange={(e) => setCmd(e.target.value)}>{['SLEEP 400', 'SLEEP 1000', 'PRIME 5000000', 'PRIME 20000000', 'TIME'].map((x) => <option key={x}>{x}</option>)}</Form.Select></Form.Group>
@@ -118,8 +118,8 @@ function Routing() {
         {live?.result ? <><GraphSvg edges={live.edges} path={live.result.path} /><Steps r={live.result} />
           <div className="small ns-muted mt-2">OSPF interface cost = 100 Mbps ÷ bandwidth: {live.ospfExample.map((o) => `${o.mbps} Mbps → ${o.cost}`).join(' · ')}. Windows derives its automatic interface metric from link speed in the same spirit (the USB RNDIS adapter reports 0 bps, which is why we set metrics by hand).</div></> : <div className="ns-muted">Waiting for adapters…</div>}
       </Card>
-      <Card title="Practical 2: Dijkstra's Algorithm for Link State Routing Protocol (OSPF)">
-        <Why>Unit-II (Network Layer & Routing): Practical 2 implementation of Dijkstra's equation for Link State Routing Protocol (OSPF) on a network flow provided by instructor. Edit edges as JSON: [from, to, cost].</Why>
+      <Card title="Practical 2: Dijkstra on a graph given by the instructor">
+        <Why>Edit the edge list as JSON: [from, to, cost]. Links are bidirectional. Costs must not be negative.</Why>
         <Form.Control as="textarea" rows={3} className="ns-mono mb-2" value={edges} onChange={(e) => setEdges(e.target.value)} />
         <div className="d-flex gap-2 align-items-center"><Form.Control size="sm" style={{ width: 90 }} value={src} onChange={(e) => setSrc(e.target.value)} /> → <Form.Control size="sm" style={{ width: 90 }} value={dst} onChange={(e) => setDst(e.target.value)} />
           <Button size="sm" disabled={c.busy} onClick={async () => { try { setR(await c.call('/api/lab/dijkstra', { edges: JSON.parse(edges), src, dst })); } catch { setR(null); alert('Edges must be valid JSON'); } }}>Run Dijkstra</Button></div>
@@ -136,8 +136,8 @@ function Packets() {
   if (!p) return null;
   return (
     <>
-      <Card title="Practical 3c: Understanding Protocol Stack of Intranet (Wireshark)">
-        <Why>Unit-I/II/III (Protocol Formats): Analyzes packet formats of Ethernet II, IPv4, UDP, and DNS query captured through Wireshark (total frame size {p.totalFrameBytes} bytes). Filter: <code>{p.wiresharkFilter}</code>.</Why>
+      <Card title="Practical 3c: anatomy of NetSwitch's UDP/DNS probe">
+        <Why>Frame size {p.totalFrameBytes} bytes. Capture with Wireshark using the filter <code>{p.wiresharkFilter}</code> and compare every field below with your capture.</Why>
         {p.layers.map((l) => (<div key={l.layer} className="border rounded p-2 mb-2"><b>{l.layer}</b> <span className="ns-pill ms-1">{l.size} bytes</span>
           <Table size="sm" className="ns-table mb-0 mt-1"><tbody>{l.fields.map(([k, sz, v], i) => <tr key={i}><td style={{ width: '24%' }}>{k}</td><td style={{ width: '8%' }}>{sz}</td><td className="ns-mono">{v}</td></tr>)}</tbody></Table></div>))}
         <div className="small ns-muted">DNS payload bytes: <span className="ns-mono">{p.dnsHex}</span></div><div className="small ns-muted mt-1">{p.note}</div>
@@ -155,7 +155,7 @@ function Mail() {
   return (
     <div className="row g-3">
       <div className="col-lg-6"><Card title="SMTP client → SMTP server (send)">
-        <Why>Unit-III Application Layer (Email: SMTP, MIME, POP3): Text dialog over TCP, MIME 1.0 base64 encoding, and dot-stuffing. NetSwitch automatically dispatches alert emails upon adapter failover events.</Why>
+        <Why>Every real failover also sends an alert mail through this server. SMTP is a text dialog over TCP; MIME headers describe the content type and encoding.</Why>
         <Form.Control size="sm" className="mb-2" value={subject} onChange={(e) => setSubject(e.target.value)} />
         <Form.Control as="textarea" rows={3} className="mb-2" value={text} onChange={(e) => setText(e.target.value)} />
         <Button size="sm" disabled={c.busy} onClick={async () => { const r = await c.call('/api/lab/mail/send', { subject, text }); if (r) { setTr(r.transcript); load(); } }}>Send mail</Button>
@@ -175,8 +175,8 @@ const NEEDS_HOST = ['ping', 'tracert', 'nslookup', 'tls'];
 function Tools() {
   const [tool, setTool] = useState('ping'); const [target, setTarget] = useState('1.1.1.1'); const [r, setR] = useState(null); const c = useCall();
   return (
-    <Card title="Practical 1b: Hands-On Networking Commands (Fixed, Whitelisted, No Shell)">
-      <Why>Unit-I & II (Practical 1b): ping/tracert = ICMP · arp = address resolution · netstat = sockets · route = routing table · ipconfig = addresses · nslookup = DNS over UDP 53 · tls = HTTPS handshake with ALPN.</Why>
+    <Card title="Practical 1b: network commands (fixed, whitelisted, no shell)">
+      <Why>ping/tracert = ICMP · arp = address resolution · netstat = sockets · route = routing table · ipconfig = addresses · nslookup = DNS over UDP 53 · tls = HTTPS handshake with ALPN (HTTP/2 negotiation).</Why>
       <div className="d-flex gap-2 flex-wrap mb-2">
         <Form.Select size="sm" style={{ width: 150 }} value={tool} onChange={(e) => { setTool(e.target.value); setR(null); }}>{['ping', 'tracert', 'arp', 'netstat', 'route', 'ipconfig', 'nbtstat', 'nslookup', 'tls'].map((x) => <option key={x}>{x}</option>)}</Form.Select>
         {NEEDS_HOST.includes(tool) && <Form.Control size="sm" style={{ width: 220 }} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="host or IPv4" />}
