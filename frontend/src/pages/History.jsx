@@ -33,10 +33,18 @@ export default function History() {
       </div>
       {err && <div className="text-danger mb-2">{err}</div>}
       <Row className="g-3 mb-3">
-        <Col lg={6}><div className="ns-card p-3"><h6>Average score</h6>
-          <ResponsiveContainer width="100%" height={240}><LineChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" minTickGap={40} /><YAxis width={40} domain={[0, 100]} /><Tooltip /><Line dataKey="score" stroke="#0d9488" dot={false} connectNulls isAnimationActive={false} /></LineChart></ResponsiveContainer></div></Col>
-        <Col lg={6}><div className="ns-card p-3"><h6>RTT (ms) and loss (%)</h6>
-          <ResponsiveContainer width="100%" height={240}><LineChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" minTickGap={40} /><YAxis width={40} /><Tooltip /><Legend /><Line dataKey="rtt_ms" name="RTT ms" stroke="#6366f1" dot={false} connectNulls isAnimationActive={false} /><Line dataKey="loss_pct" name="Loss %" stroke="#dc2626" dot={false} connectNulls isAnimationActive={false} /></LineChart></ResponsiveContainer></div></Col>
+        <Col lg={6}><div className="ns-card p-3"><h6 className="mb-2">Average score</h6>
+          {rows.length === 0 ? (
+            <div className="ns-empty-state" style={{ height: 220 }}>No historical readings found for {key || 'interface'} in the last {minutes} minutes.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}><LineChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" minTickGap={40} /><YAxis width={40} domain={[0, 100]} /><Tooltip /><Line dataKey="score" stroke="#0d9488" dot={false} connectNulls isAnimationActive={false} /></LineChart></ResponsiveContainer>
+          )}</div></Col>
+        <Col lg={6}><div className="ns-card p-3"><h6 className="mb-2">RTT (ms) and loss (%)</h6>
+          {rows.length === 0 ? (
+            <div className="ns-empty-state" style={{ height: 220 }}>No historical readings found for {key || 'interface'} in the last {minutes} minutes.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}><LineChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" minTickGap={40} /><YAxis width={40} /><Tooltip /><Legend /><Line dataKey="rtt_ms" name="RTT ms" stroke="#6366f1" dot={false} connectNulls isAnimationActive={false} /><Line dataKey="loss_pct" name="Loss %" stroke="#dc2626" dot={false} connectNulls isAnimationActive={false} /></LineChart></ResponsiveContainer>
+          )}</div></Col>
       </Row>
       <div className="ns-card p-3"><h6>Failover events (stored in MySQL)</h6><FailoverTable events={events} /></div>
       <Modal show={showSql} onHide={() => setShowSql(false)} size="lg">

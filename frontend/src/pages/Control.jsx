@@ -73,13 +73,19 @@ export default function Control() {
               <tr key={a.id}>
                 <td><b>{a.alias}</b> {a.id === s.activeId && <span className="ns-pill live ms-1">ACTIVE</span>}</td>
                 <td className="ns-mono">#{a.index} · {a.ip}</td><td>{a.metric}</td><td>{a.score ?? '—'}</td>
-                <td className="text-end"><Button size="sm" disabled={!enabled || a.id === s.activeId || !a.up} onClick={() => run(() => api('/api/control/switch', { method: 'POST', body: { to: a.id } }))}>Make active</Button></td>
+                <td className="text-end">
+                  <Button size="sm" disabled={!enabled || a.id === s.activeId || !a.up} onClick={() => run(() => api('/api/control/switch', { method: 'POST', body: { to: a.id } }))}>
+                    {busy ? 'Switching…' : 'Make active'}
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
         </Table>
         <p className="ns-muted small mb-2">Switching changes only the Windows interface metric (lowest = preferred), then verifies the route and the source address of a new connection. If verification fails, the previous metrics are restored.</p>
-        <Button size="sm" variant="outline-danger" disabled={!enabled} onClick={() => run(() => api('/api/control/restore', { method: 'POST' }))}>Restore original adapter settings</Button>
+        <Button size="sm" variant="outline-danger" disabled={!enabled} onClick={() => run(() => api('/api/control/restore', { method: 'POST' }))}>
+          {busy ? 'Restoring…' : 'Restore original adapter settings'}
+        </Button>
       </div>
       {s.mode === 'sim' ? <SimPanel adapters={s.adapters} /> : (
         <div className="ns-card p-3 mb-3">

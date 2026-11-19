@@ -33,7 +33,7 @@ function Shell({ children }) {
           </Navbar.Collapse>
         </Container>
       </Navbar>
-      <Container className="py-4">{children}</Container>
+      <Container className="py-3">{children}</Container>
       <Toasts />
     </>
   );

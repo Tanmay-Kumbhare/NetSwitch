@@ -51,3 +51,26 @@ docs/                 ARCHITECTURE, BRINGUP, CALIBRATION, test-results (S1–S6 
 - Public IP is the same on both paths when both come from one phone, so path proof uses route lookup, source address and Wireshark, not an IP-echo service.
 - If Wi-Fi and USB are both from the *same phone*, the phone is a shared uplink. Failover then protects against laptop-side link problems and demonstrates the mechanism; Clumsy is used to impair one path.
 - Failover time is measured, not promised. See `docs/CALIBRATION.md`.
+
+---
+
+## Daily Run Commands (Run Both as Administrator)
+
+Open **two separate Windows PowerShell windows as Administrator** and run the respective commands:
+
+### Terminal 1 — Backend (API & Monitoring Agent)
+```powershell
+cd "d:\TY (5th Sem)\CNT\CP\NetSwitch\backend"
+npm start
+```
+* **Runs on:** `http://127.0.0.1:4000`
+* Monitors network adapters, computes health scores, handles WebSocket updates, and applies metric switches.
+
+### Terminal 2 — Frontend (Live Web UI)
+```powershell
+cd "d:\TY (5th Sem)\CNT\CP\NetSwitch\frontend"
+npm run dev
+```
+* **Runs on:** `http://localhost:5173`
+* Opens the live React dashboard with hot-reloading (automatically proxies `/api` and `/ws` to the backend).
+
