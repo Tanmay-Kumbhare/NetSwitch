@@ -10,9 +10,11 @@ function Stat({ k, v }) { return <div className="ns-stat"><span className="v">{v
 export default function AdapterCard({ a, active, pinningEnabled = false, scoreConfig = null, wifiStatus = null }) {
   const pathTooltip = a.pathVerified
     ? 'Probes are pinned to this interface via verified /32 routes'
-    : (!pinningEnabled
-      ? 'Route pinning is off, so probes may not be using this adapter'
-      : (a.pinError || 'Route pinning failed or path unverified'));
+    : (active
+      ? 'Active default route carries outbound probe traffic'
+      : (!pinningEnabled
+        ? 'Route pinning is off; standby probes may route via default gateway'
+        : (a.pinError ? `Pinning unverified: ${a.pinError}` : 'Unpinned standby path')));
 
   const wifi = a.wifi || (a.kind === 'wifi' ? wifiStatus?.current : null);
   const wifiRate = wifi?.rxRate || wifi?.txRate;
@@ -47,8 +49,10 @@ export default function AdapterCard({ a, active, pinningEnabled = false, scoreCo
             {a.udpFiltered && <span className="ns-pill bad">UDP FILTERED · ICMP fallback</span>}
             {a.pathVerified ? (
               <span className="ns-pill ok" title={pathTooltip}>PATH VERIFIED</span>
+            ) : active ? (
+              <span className="ns-pill live" title={pathTooltip}>DEFAULT ROUTE</span>
             ) : (
-              <span className="ns-pill bad" title={pathTooltip}>PATH UNVERIFIED</span>
+              <span className="ns-pill off" title={pathTooltip}>UNPINNED ROUTE</span>
             )}
           </div>
         </div>
