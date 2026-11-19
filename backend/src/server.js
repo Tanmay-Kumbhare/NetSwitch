@@ -12,6 +12,7 @@ import { makeAuth, httpErr } from './auth.js';
 import { WinController } from './control/winController.js';
 import { SimController } from './control/simController.js';
 import { scanWifi, getWifiStatus } from './windows/wifiScan.js';
+import { runDemoScenario, SCENARIO_DEFS } from './core/demo.js';
 import { subnetInfo } from './core/subnet.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -82,6 +83,18 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   app.get('/api/wifi/status', any, wrap(async (req, res) => {
     try { res.json(await getWifiStatus({ mode })); } catch (e) { throw httpErr(503, `Wi-Fi status unavailable: ${e.message}`); }
   }));
+  // in-memory demo scenarios: pure simulation, zero OS mutations or database writes
+  app.get('/api/demo/scenarios', any, (req, res) => {
+    res.json(Object.values(SCENARIO_DEFS));
+  });
+  app.post('/api/demo/run', any, (req, res) => {
+    const scenario = req.body?.scenario || 'degradation';
+    try {
+      res.json(runDemoScenario(scenario, agent.cfg));
+    } catch (e) {
+      throw httpErr(400, e.message);
+    }
+  });
   // sim-only fault injection (the Windows demo uses Clumsy instead)
   if (mode === 'sim') {
     app.post('/api/sim/impair', admin, (req, res) => { try { res.json(controller.impair(String(req.body?.adapter), req.body || {})); } catch (e) { throw httpErr(400, e.message); } });

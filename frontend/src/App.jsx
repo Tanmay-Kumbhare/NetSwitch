@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import History from './pages/History.jsx';
 import Control from './pages/Control.jsx';
 import InterfaceDetail from './pages/InterfaceDetail.jsx';
+import Demo from './pages/Demo.jsx';
 import Learn from './pages/Learn.jsx';
 
 function Shell({ children }) {
@@ -22,7 +23,7 @@ function Shell({ children }) {
           <Navbar.Toggle />
           <Navbar.Collapse>
             <Nav className="me-auto">
-              {[['/', 'Dashboard'], ['/history', 'History'], ['/control', 'Control'], ['/learn', 'Learn']].map(([to, label]) => (
+              {[['/', 'Dashboard'], ['/history', 'History'], ['/control', 'Control'], ['/demo', 'Demo'], ['/learn', 'Learn']].map(([to, label]) => (
                 <Nav.Link key={to} as={NavLink} to={to} end={to === '/'}>{label}</Nav.Link>
               ))}
             </Nav>
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/history" element={<History />} />
         <Route path="/control" element={<Control />} />
         <Route path="/interfaces/:key" element={<InterfaceDetail />} />
+        <Route path="/demo" element={<Demo />} />
         <Route path="/learn" element={<Learn />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
