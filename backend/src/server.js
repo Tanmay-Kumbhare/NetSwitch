@@ -13,7 +13,6 @@ import { WinController } from './control/winController.js';
 import { SimController } from './control/simController.js';
 import { scanWifi } from './windows/wifiScan.js';
 import { subnetInfo } from './core/subnet.js';
-import { startLab, registerLabRoutes } from './lab/index.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -32,7 +31,6 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   await repo.init();
   const agent = new Agent({ controller, repo, cfg, log });
   await agent.start();
-  const lab = await startLab({ log, ports: { tcpPort: Number(env.LAB_TCP_PORT || 5051), udpPort: Number(env.LAB_UDP_PORT || 5052) } });
   const auth = makeAuth(repo);
 
   const app = express();
@@ -86,8 +84,6 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
     app.post('/api/sim/reset', admin, (req, res) => { controller.resetImpairments(); res.json({ ok: true }); });
   }
 
-  registerLabRoutes(app, { lab, getSnapshot: () => agent.lastSnapshot, requireAuth: any, requireAdmin: admin });
-
   const dist = path.resolve(here, '..', '..', 'frontend', 'dist');
   if (fs.existsSync(dist)) { app.use(express.static(dist)); app.get(/^\/(?!api|ws).*/, (req, res) => res.sendFile(path.join(dist, 'index.html'))); }
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
@@ -118,10 +114,10 @@ export async function createApp({ env = process.env, repo = createRepo(env), con
   });
   const broadcast = (obj) => { const s = JSON.stringify(obj); for (const c of wss.clients) if (c.readyState === 1) c.send(s); };
   agent.on('snapshot', broadcast);
-  agent.on('failover', (event) => { broadcast({ type: 'failover', event }); lab.onFailover(event); });
+  agent.on('failover', (event) => broadcast({ type: 'failover', event }));
 
-  const close = async () => { await agent.stop(); await lab.close(); wss.close(); await new Promise((r) => server.close(r)); await repo.close(); };
-  return { app, server, agent, repo, controller, lab, close, mode };
+  const close = async () => { await agent.stop(); wss.close(); await new Promise((r) => server.close(r)); await repo.close(); };
+  return { app, server, agent, repo, controller, close, mode };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

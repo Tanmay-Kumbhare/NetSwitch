@@ -1,2 +1,0 @@
-TY-C Timetable (sample file served over the TCP file-transfer command)
-Mon 09:00 CNT   Tue 10:00 ML   Wed 11:00 DAA   Thu 09:00 Cloud   Fri 14:00 CNT lab
