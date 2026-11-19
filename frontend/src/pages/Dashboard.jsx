@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Alert, Button, Col, Row, Spinner, Table } from 'react-bootstrap';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
 import { useAuth } from '../auth.jsx';
@@ -248,6 +249,21 @@ export default function Dashboard() {
                 </span>
               )
             )}
+          </div>
+
+          {/* Candidates Intersection Summary Strip */}
+          <div className="d-flex flex-wrap align-items-center justify-content-between text-muted small mb-2 px-1">
+            <div>
+              <span className="fw-semibold text-dark">
+                {wifiAdvisor.networks?.length ?? 0} connectable candidate{(wifiAdvisor.networks?.length ?? 0) === 1 ? '' : 's'}
+              </span>
+              <span className="ms-1">
+                (intersected from {wifiStatus?.savedProfiles?.length ?? 0} saved profile{(wifiStatus?.savedProfiles?.length ?? 0) === 1 ? '' : 's'} &amp; {wifiStatus?.scannedNetworks?.length ?? 0} nearby network{(wifiStatus?.scannedNetworks?.length ?? 0) === 1 ? '' : 's'})
+              </span>
+            </div>
+            <Link to="/control" className="text-decoration-none small fw-semibold text-primary">
+              View full saved profiles &amp; scan on Control →
+            </Link>
           </div>
 
           {/* In-Range Saved Networks Sorted by Predicted Rating */}
