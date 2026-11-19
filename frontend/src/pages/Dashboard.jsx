@@ -176,7 +176,7 @@ export default function Dashboard() {
               Pinning: {s.probeRoutePinning ? 'ON' : 'OFF'}
             </span>
             <span className={`ns-pill ${cls}`} title="Decision engine phase">{label}</span>
-            {s.holdRemainingMs > 0 && <span className="ns-pill">hold-down {Math.ceil(s.holdRemainingMs / 1000)} s</span>}
+            {s.holdRemainingMs > 0 && <span className="ns-pill">Hold-down: {Math.ceil(s.holdRemainingMs / 1000)} s</span>}
           </div>
         </div>
       </div>
@@ -224,9 +224,9 @@ export default function Dashboard() {
             </div>
             {wifiAdvisor.current?.ssid && (
               <div className="small text-muted">
-                Current: <b className="text-dark">{wifiAdvisor.current.ssid}</b>{wifiAdvisor.current.signal != null ? ` · ${wifiAdvisor.current.signal}% signal` : ''}{wifiAdvisor.current.band ? ` · ${wifiAdvisor.current.band}` : ''}
+                Current: <b className="text-dark">{wifiAdvisor.current.ssid}</b>{wifiAdvisor.current.signal != null ? ` · Signal ${wifiAdvisor.current.signal}%` : ''}{wifiAdvisor.current.band ? ` · ${wifiAdvisor.current.band}` : ''}
                 {wifiAdvisor.current.measuredScore != null && (
-                  <> · measured score <b className="text-primary">{wifiAdvisor.current.measuredScore}</b></>
+                  <> · Measured Score <b className="text-primary">{wifiAdvisor.current.measuredScore}</b></>
                 )}
               </div>
             )}
@@ -258,7 +258,7 @@ export default function Dashboard() {
           <div className="d-flex flex-wrap align-items-center justify-content-between text-muted small mb-2 px-1">
             <div>
               <span className="fw-semibold text-dark">
-                {wifiAdvisor.networks?.length ?? 0} connectable candidate{(wifiAdvisor.networks?.length ?? 0) === 1 ? '' : 's'}
+                {wifiAdvisor.networks?.length ?? 0} Connectable Candidate{(wifiAdvisor.networks?.length ?? 0) === 1 ? '' : 's'}
               </span>
               <span className="ms-1">
                 (intersected from {wifiStatus?.savedProfiles?.length ?? 0} saved profile{(wifiStatus?.savedProfiles?.length ?? 0) === 1 ? '' : 's'} &amp; {wifiStatus?.scannedNetworks?.length ?? 0} nearby network{(wifiStatus?.scannedNetworks?.length ?? 0) === 1 ? '' : 's'})
@@ -320,7 +320,7 @@ export default function Dashboard() {
                         </td>
                         <td>
                           <span className="badge bg-primary px-2 py-1">
-                            {net.predictedRating} predicted
+                            {net.predictedRating} Predicted
                           </span>
                         </td>
                         <td>
@@ -390,7 +390,7 @@ export default function Dashboard() {
       <Row className="g-3 mb-3">
         <Col lg={6}>
           <div className="ns-card p-3">
-            <h6 className="mb-2">Latest RTT per adapter (ms)</h6>
+            <h6 className="mb-2">Latest RTT per Adapter (ms)</h6>
             {series.length === 0 ? (
               <div className="ns-empty-state" style={{ height: 220 }}>Gathering RTT telemetry…</div>
             ) : (
@@ -421,7 +421,7 @@ export default function Dashboard() {
 
         <Col lg={6}>
           <div className="ns-card p-3">
-            <h6 className="mb-2">Score per adapter (0–100)</h6>
+            <h6 className="mb-2">Score per Adapter (0–100)</h6>
             {series.length === 0 ? (
               <div className="ns-empty-state" style={{ height: 220 }}>Gathering score telemetry…</div>
             ) : (
@@ -469,7 +469,7 @@ export default function Dashboard() {
 
       {/* Failover timeline */}
       <div className="ns-card p-3">
-        <h6 className="mb-2">Failover timeline (this session)</h6>
+        <h6 className="mb-2">Failover Timeline (This Session)</h6>
         <FailoverTable events={events} />
       </div>
     </>

@@ -5,6 +5,14 @@ import { api } from '../api.js';
 import { useLive } from '../live.jsx';
 import FailoverTable from '../components/FailoverTable.jsx';
 
+function formatInterfaceName(i) {
+  if (!i) return 'Interface';
+  const s = String(i).toLowerCase();
+  if (s === 'wifi') return 'Wi-Fi';
+  if (s === 'usb') return 'USB';
+  return i.charAt(0).toUpperCase() + i.slice(1);
+}
+
 export default function History() {
   const { snapshot } = useLive();
   const ids = snapshot?.adapters.map((a) => a.id) ?? [];
@@ -26,29 +34,68 @@ export default function History() {
   return (
     <>
       <div className="d-flex flex-wrap gap-3 align-items-end mb-3">
-        <h4 className="mb-0 me-auto">History</h4>
-        <Form.Group><Form.Label className="small mb-0">Interface</Form.Label><Form.Select size="sm" value={key} onChange={(e) => setKey(e.target.value)}>{ids.map((i) => <option key={i}>{i}</option>)}</Form.Select></Form.Group>
-        <Form.Group><Form.Label className="small mb-0">Range</Form.Label><Form.Select size="sm" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>{[[5, '5 min'], [15, '15 min'], [60, '1 hour'], [360, '6 hours']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Form.Select></Form.Group>
+        <h4 className="mb-0 me-auto">Telemetry History &amp; Logs</h4>
+        <Form.Group>
+          <Form.Label className="small mb-0">Interface</Form.Label>
+          <Form.Select size="sm" value={key} onChange={(e) => setKey(e.target.value)}>
+            {ids.map((i) => <option key={i} value={i}>{formatInterfaceName(i)}</option>)}
+          </Form.Select>
+        </Form.Group>
+        <Form.Group>
+          <Form.Label className="small mb-0">Range</Form.Label>
+          <Form.Select size="sm" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
+            {[[5, '5 min'], [15, '15 min'], [60, '1 hour'], [360, '6 hours']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </Form.Select>
+        </Form.Group>
         <Button size="sm" variant="outline-dark" onClick={() => setShowSql(true)} disabled={!data}>Show SQL</Button>
       </div>
       {err && <div className="text-danger mb-2">{err}</div>}
       <Row className="g-3 mb-3">
-        <Col lg={6}><div className="ns-card p-3"><h6 className="mb-2">Average score</h6>
-          {rows.length === 0 ? (
-            <div className="ns-empty-state" style={{ height: 220 }}>No historical readings found for {key || 'interface'} in the last {minutes} minutes.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}><LineChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" minTickGap={40} /><YAxis width={40} domain={[0, 100]} /><Tooltip /><Line dataKey="score" stroke="#0d9488" dot={false} connectNulls isAnimationActive={false} /></LineChart></ResponsiveContainer>
-          )}</div></Col>
-        <Col lg={6}><div className="ns-card p-3"><h6 className="mb-2">RTT (ms) and loss (%)</h6>
-          {rows.length === 0 ? (
-            <div className="ns-empty-state" style={{ height: 220 }}>No historical readings found for {key || 'interface'} in the last {minutes} minutes.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}><LineChart data={rows}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" minTickGap={40} /><YAxis width={40} /><Tooltip /><Legend /><Line dataKey="rtt_ms" name="RTT ms" stroke="#6366f1" dot={false} connectNulls isAnimationActive={false} /><Line dataKey="loss_pct" name="Loss %" stroke="#dc2626" dot={false} connectNulls isAnimationActive={false} /></LineChart></ResponsiveContainer>
-          )}</div></Col>
+        <Col lg={6}>
+          <div className="ns-card p-3">
+            <h6 className="mb-2">Average Score (0–100)</h6>
+            {rows.length === 0 ? (
+              <div className="ns-empty-state" style={{ height: 220 }}>No historical readings found for {formatInterfaceName(key)} in the last {minutes} minutes.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={rows}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" minTickGap={40} />
+                  <YAxis width={40} domain={[0, 100]} />
+                  <Tooltip />
+                  <Line dataKey="score" name="Score" stroke="#0d9488" dot={false} connectNulls isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Col>
+        <Col lg={6}>
+          <div className="ns-card p-3">
+            <h6 className="mb-2">RTT (ms) &amp; Packet Loss (%)</h6>
+            {rows.length === 0 ? (
+              <div className="ns-empty-state" style={{ height: 220 }}>No historical readings found for {formatInterfaceName(key)} in the last {minutes} minutes.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={rows}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" minTickGap={40} />
+                  <YAxis width={40} />
+                  <Tooltip />
+                  <Legend />
+                  <Line dataKey="rtt_ms" name="RTT (ms)" stroke="#6366f1" dot={false} connectNulls isAnimationActive={false} />
+                  <Line dataKey="loss_pct" name="Loss (%)" stroke="#dc2626" dot={false} connectNulls isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Col>
       </Row>
-      <div className="ns-card p-3"><h6>Failover events (stored in MySQL)</h6><FailoverTable events={events} /></div>
+      <div className="ns-card p-3">
+        <h6>Historical Failover Events (MySQL)</h6>
+        <FailoverTable events={events} />
+      </div>
       <Modal show={showSql} onHide={() => setShowSql(false)} size="lg">
-        <Modal.Header closeButton><Modal.Title>Query behind these charts</Modal.Title></Modal.Header>
+        <Modal.Header closeButton><Modal.Title>Aggregated Telemetry Query (MySQL)</Modal.Title></Modal.Header>
         <Modal.Body>
           <p className="ns-muted small">Readings are written every 5 s. The database averages them into time buckets of {data?.bucketSec} s; the browser only draws the result.</p>
           <pre className="ns-pre">{sqlText}</pre>

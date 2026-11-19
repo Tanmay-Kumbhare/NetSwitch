@@ -88,7 +88,7 @@ export default function Demo() {
       <Alert variant="warning" className="d-flex align-items-center gap-2 mb-3 shadow-sm py-2">
         <Badge bg="danger" className="text-uppercase px-2 py-1">Simulation</Badge>
         <span className="fw-semibold">
-          SIMULATION: no real network changes. Runs purely in memory using the mathematical scoring and failover decision functions.
+          SIMULATION MODE: No real network changes. Runs purely in memory using mathematical scoring and failover decision functions.
         </span>
       </Alert>
 
@@ -155,7 +155,7 @@ export default function Demo() {
               {current.phase}
             </span>
             {current.holdRemainingSec > 0 && (
-              <span className="ns-pill off">hold-down {current.holdRemainingSec}s</span>
+              <span className="ns-pill off">Hold-down: {current.holdRemainingSec}s</span>
             )}
           </div>
         </div>
@@ -187,7 +187,7 @@ export default function Demo() {
               </div>
               <div>
                 {current.activeId === 'wifi' && <span className="ns-pill live me-1">ACTIVE</span>}
-                <span className="ns-pill">metric {current.activeId === 'wifi' ? 5 : 75}</span>
+                <span className="ns-pill">Metric {current.activeId === 'wifi' ? 5 : 75}</span>
               </div>
             </div>
 
@@ -196,7 +196,7 @@ export default function Demo() {
                 {current.scores.wifi != null ? current.scores.wifi : '—'}
               </span>
               <span className={`badge bg-${current.bands.wifi === 'healthy' ? 'success' : (current.bands.wifi === 'degraded' ? 'warning' : 'danger')}`}>
-                {current.bands.wifi}
+                {String(current.bands.wifi || '').charAt(0).toUpperCase() + String(current.bands.wifi || '').slice(1)}
               </span>
             </div>
 
@@ -223,7 +223,7 @@ export default function Demo() {
               </div>
               <div>
                 {current.activeId === 'usb' && <span className="ns-pill live me-1">ACTIVE</span>}
-                <span className="ns-pill">metric {current.activeId === 'usb' ? 5 : 75}</span>
+                <span className="ns-pill">Metric {current.activeId === 'usb' ? 5 : 75}</span>
               </div>
             </div>
 
@@ -232,7 +232,7 @@ export default function Demo() {
                 {current.scores.usb != null ? current.scores.usb : '—'}
               </span>
               <span className={`badge bg-${current.bands.usb === 'healthy' ? 'success' : (current.bands.usb === 'degraded' ? 'warning' : 'danger')}`}>
-                {current.bands.usb}
+                {String(current.bands.usb || '').charAt(0).toUpperCase() + String(current.bands.usb || '').slice(1)}
               </span>
             </div>
 
@@ -253,7 +253,7 @@ export default function Demo() {
           <span className="fw-bold">Second {current.second} Decision:</span>
           {current.action && (
             <Badge bg="danger" className="text-uppercase">
-              SWITCH EVENT: {current.action.reason}
+              SWITCH EVENT: {String(current.action.reason).replace(/_/g, ' ').toUpperCase()}
             </Badge>
           )}
         </div>

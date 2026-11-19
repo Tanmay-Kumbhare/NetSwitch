@@ -27,10 +27,14 @@ function Shell({ children }) {
                 <Nav.Link key={to} as={NavLink} to={to} end={to === '/'}>{label}</Nav.Link>
               ))}
             </Nav>
-            <span className={`ns-pill me-3 ${status === 'open' ? 'ok' : 'bad'}`} title="WebSocket connection">WS {status}{pingMs != null && status === 'open' ? ` · ${pingMs} ms` : ''}</span>
+            <span className={`ns-pill me-3 ${status === 'open' ? 'ok' : 'bad'}`} title="WebSocket connection">
+              WS {status === 'open' ? 'Connected' : 'Disconnected'}{pingMs != null && status === 'open' ? ` · ${pingMs} ms` : ''}
+            </span>
             {hello && <span className={`ns-pill me-3 ${hello.mode === 'sim' ? 'sim' : 'live'}`}>{hello.mode === 'sim' ? 'SIMULATION' : 'LIVE · Windows'}</span>}
-            <span className="text-light me-3 small">{user.name} ({user.role})</span>
-            <button className="btn btn-sm btn-outline-light" onClick={logout}>Log out</button>
+            <span className="text-light me-3 small">
+              {user.name} ({String(user.role).charAt(0).toUpperCase() + String(user.role).slice(1)})
+            </span>
+            <button className="btn btn-sm btn-outline-light" onClick={logout}>Log Out</button>
           </Navbar.Collapse>
         </Container>
       </Navbar>

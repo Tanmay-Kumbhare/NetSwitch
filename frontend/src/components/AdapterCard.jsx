@@ -16,17 +16,17 @@ export default function AdapterCard({ a, active, pinningEnabled = false, scoreCo
 
   const wifi = a.wifi || (a.kind === 'wifi' ? wifiStatus?.current : null);
   const wifiRate = wifi?.rxRate || wifi?.txRate;
-  const wifiBandCh = wifi?.band && wifi?.channel ? `${wifi.band} ch ${wifi.channel}` : (wifi?.band || (wifi?.channel ? `ch ${wifi.channel}` : ''));
+  const wifiBandCh = wifi?.band && wifi?.channel ? `${wifi.band} (Ch ${wifi.channel})` : (wifi?.band || (wifi?.channel ? `Ch ${wifi.channel}` : ''));
   const wifiDesc = wifi && wifi.state === 'connected' && wifi.ssid
-    ? `Connected to ${wifi.ssid}${wifi.signal != null ? ` · signal ${wifi.signal}%` : ''}${wifiBandCh ? ` · ${wifiBandCh}` : ''}${wifiRate ? ` · ${wifiRate} Mbps` : ''}`
-    : (wifi ? `Wi-Fi ${wifi.state || 'disconnected'}` : null);
+    ? `Connected to ${wifi.ssid}${wifi.signal != null ? ` · Signal ${wifi.signal}%` : ''}${wifiBandCh ? ` · ${wifiBandCh}` : ''}${wifiRate ? ` · ${wifiRate} Mbps` : ''}`
+    : (wifi ? `Wi-Fi ${wifi.state === 'disconnected' ? 'Disconnected' : (wifi.state || 'Disconnected')}` : null);
 
   return (
     <div className={`ns-card p-3 h-100 ${active ? 'active' : ''} ${!a.up ? 'down' : ''}`}>
       <div className="d-flex justify-content-between align-items-start mb-2">
         <div>
           <Link to={`/interfaces/${a.id}`} className="fw-semibold text-decoration-none text-dark">{a.alias}</Link>
-          <div className="ns-muted ns-mono">{a.ip}/{a.prefix} · gw {a.gateway}</div>
+          <div className="ns-muted ns-mono">{a.ip}/{a.prefix} · GW {a.gateway}</div>
           {a.kind === 'wifi' && wifiDesc && (
             <div className="small mt-1 text-truncate" title={wifiDesc}>
               <span className="text-secondary fw-medium">{wifiDesc}</span>
@@ -35,7 +35,7 @@ export default function AdapterCard({ a, active, pinningEnabled = false, scoreCo
         </div>
         <div className="text-end d-flex flex-column gap-1 align-items-end">
           {active && <span className="ns-pill live">ACTIVE</span>}
-          <span className="ns-pill">{a.kind.toUpperCase()} · metric {a.metric}</span>
+          <span className="ns-pill">{a.kind.toUpperCase()} · Metric {a.metric}</span>
         </div>
       </div>
       <div className="d-flex align-items-center gap-3">
@@ -58,8 +58,8 @@ export default function AdapterCard({ a, active, pinningEnabled = false, scoreCo
         <Stat k="Loss" v={f(a.lossPct, 0, '%')} />
         <Stat k="RTT (median)" v={f(a.rttMs, 0, ' ms')} />
         <Stat k="Jitter" v={f(a.jitterMs, 1, ' ms')} />
-        <Stat k="TCP connect" v={f(a.tcpMs, 0, ' ms')} />
-        <Stat k="Lost in a row" v={a.consecutiveLost} />
+        <Stat k="TCP Connect" v={f(a.tcpMs, 0, ' ms')} />
+        <Stat k="Lost in a Row" v={a.consecutiveLost} />
       </div>
       {scoreConfig?.limits && scoreConfig?.weights && (
         <div className="mt-2 pt-2 border-top ns-muted d-flex flex-wrap gap-2 justify-content-between align-items-center" style={{ fontSize: '0.72rem' }}>

@@ -17,15 +17,15 @@ function HandshakeInspector() {
   useEffect(() => { if (key && accept && crypto?.subtle) acceptFor(key).then((c) => setCheck({ computed: c, ok: c === accept })); }, [key, accept]);
   return (
     <div className="ns-card p-3 mb-3">
-      <h6>WebSocket handshake inspector <span className={`ns-pill ms-2 ${status === 'open' ? 'ok' : 'bad'}`}>{status}</span></h6>
+      <h6>WebSocket Handshake Inspector <span className={`ns-pill ms-2 ${status === 'open' ? 'ok' : 'bad'}`}>{status === 'open' ? 'CONNECTED' : 'DISCONNECTED'}</span></h6>
       <p className="ns-muted small">HTTP/1.1 upgrade on the same TCP connection (port 4000 or your dev port). After <code>101 Switching Protocols</code> the connection carries WebSocket frames: the agent pushes a snapshot every second, so the dashboard never polls.</p>
       {hello ? (
         <div className="row g-3">
-          <div className="col-md-6"><div className="small fw-semibold mb-1">Client request</div><pre className="ns-pre">{hello.handshake.request.join('\n')}</pre></div>
-          <div className="col-md-6"><div className="small fw-semibold mb-1">Server response</div><pre className="ns-pre">{hello.handshake.response.join('\n')}</pre></div>
+          <div className="col-md-6"><div className="small fw-semibold mb-1 text-secondary">Client Upgrade Request</div><pre className="ns-pre">{hello.handshake.request.join('\n')}</pre></div>
+          <div className="col-md-6"><div className="small fw-semibold mb-1 text-secondary">Server Switching Protocols Response</div><pre className="ns-pre">{hello.handshake.response.join('\n')}</pre></div>
           <div className="col-12 small">
             <code>Sec-WebSocket-Accept = base64( SHA-1( Sec-WebSocket-Key + "{GUID}" ) )</code>
-            {check && <div className="mt-1">Computed in this browser: <span className="ns-mono">{check.computed}</span> {check.ok ? <span className="ns-pill ok">matches the server</span> : <span className="ns-pill bad">mismatch</span>}</div>}
+            {check && <div className="mt-1">Computed in Browser: <span className="ns-mono">{check.computed}</span> {check.ok ? <span className="ns-pill ok">matches the server</span> : <span className="ns-pill bad">mismatch</span>}</div>}
           </div>
         </div>
       ) : <div className="ns-muted">Waiting for the connection…</div>}
@@ -42,7 +42,7 @@ const LAYERS = [
 
 function LayerMap() {
   return (
-    <div className="ns-card p-3 mb-3"><h6>Where each protocol appears in NetSwitch</h6>
+    <div className="ns-card p-3 mb-3"><h6>OSI Protocol Stack in NetSwitch (CNT Syllabus Mapping)</h6>
       <Table size="sm" responsive className="ns-table align-middle mb-0"><thead><tr><th>Layer</th><th>What NetSwitch does there</th><th>How</th></tr></thead>
         <tbody>{LAYERS.map(([l, w, h]) => <tr key={l}><td><b>{l}</b></td><td>{w}</td><td className="ns-mono">{h}</td></tr>)}</tbody></Table>
     </div>
@@ -64,7 +64,7 @@ function LoopStepper() {
     ['6. Switch and verify', 'The controller sets the target adapter metric to 5 and the others to 75, asks Windows which interface it would use for an unpinned address, then opens a TCP connection and checks the source address. If anything disagrees, it rolls back.'],
   ];
   return (
-    <div className="ns-card p-3"><h6>One pass of the control loop (live numbers)</h6>
+    <div className="ns-card p-3"><h6>NetSwitch Control Loop Walkthrough (Live Telemetry)</h6>
       <div className="d-flex gap-2 mb-3"><Button size="sm" variant="outline-dark" disabled={i === 0} onClick={() => setI(i - 1)}>Previous</Button><Button size="sm" disabled={i === steps.length - 1} onClick={() => setI(i + 1)}>Next</Button></div>
       {steps.map(([t, d], k) => <div key={t} className={`ns-step mb-2 ${k === i ? 'on' : ''}`} style={{ opacity: k === i ? 1 : 0.45 }}><b>{t}</b><div className="small">{k === i ? d : ''}</div></div>)}
     </div>
@@ -74,7 +74,7 @@ function LoopStepper() {
 function WifiArchitectureNote() {
   return (
     <div className="ns-card p-3 mb-3">
-      <h6>Wi-Fi single-radio constraint &amp; multi-interface failover</h6>
+      <h6>Wi-Fi Single-Radio Constraint &amp; Multi-Interface Failover Architecture</h6>
       <div className="p-2 border rounded bg-light mb-2 small">
         <b>Core Architecture Principle:</b> One Wi-Fi radio can join one network at a time. Windows chooses it from the saved-profile order; NetSwitch reports it and switches between adapters.
       </div>
@@ -86,5 +86,5 @@ function WifiArchitectureNote() {
 }
 
 export default function Learn() {
-  return (<><h4 className="mb-3">How NetSwitch works</h4><LayerMap /><WifiArchitectureNote /><HandshakeInspector /><LoopStepper /></>);
+  return (<><h4 className="mb-3">NetSwitch Technical Architecture &amp; Protocol Deep-Dive</h4><LayerMap /><WifiArchitectureNote /><HandshakeInspector /><LoopStepper /></>);
 }
