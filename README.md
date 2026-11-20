@@ -54,23 +54,47 @@ docs/                 ARCHITECTURE, BRINGUP, CALIBRATION, test-results (S1–S6 
 
 ---
 
-## Daily Run Commands (Run Both as Administrator)
+## How to Run (Choose Method 1 or Method 2)
 
-Open **two separate Windows PowerShell windows as Administrator** and run the respective commands:
+> **Important:** Always open PowerShell using **Run as Administrator** so Windows permits kernel route pinning (`New-NetRoute`) and interface metric modification (`Set-NetIPInterface`). This ensures the dashboard displays green **`PATH VERIFIED`** badges.
 
-### Terminal 1 — Backend (API & Monitoring Agent)
+---
+
+### Method 1: Two Separate Terminals (Development & Live Viva Presentation)
+
+Open **two separate Administrator PowerShell windows**:
+
+#### Terminal 1 — Backend (API & Telemetry Agent)
 ```powershell
 cd "d:\TY (5th Sem)\CNT\CP\NetSwitch\backend"
 npm start
 ```
-* **Runs on:** `http://127.0.0.1:4000`
-* Monitors network adapters, computes health scores, handles WebSocket updates, and applies metric switches.
+* **Port:** `http://127.0.0.1:4000`
+* Discovers adapters, pins `/32` test routes, measures live link telemetry, and manages MySQL database logging.
 
-### Terminal 2 — Frontend (Live Web UI)
+#### Terminal 2 — Frontend (Vite Dev Server)
 ```powershell
 cd "d:\TY (5th Sem)\CNT\CP\NetSwitch\frontend"
 npm run dev
 ```
-* **Runs on:** `http://localhost:5173`
-* Opens the live React dashboard with hot-reloading (automatically proxies `/api` and `/ws` to the backend).
+* **Dashboard URL:** `http://localhost:5173`
+* Live React UI with hot-reloading (automatically proxies REST API calls and WebSocket connections to port 4000).
+
+---
+
+### Method 2: Single All-in-One Administrator Script (Production / Single-Window Demo)
+
+To run the entire system (compiled frontend + backend agent) in **a single Administrator PowerShell window**:
+
+```powershell
+cd "d:\TY (5th Sem)\CNT\CP\NetSwitch"
+.\scripts\start-admin.ps1
+```
+
+* **Dashboard URL:** `http://127.0.0.1:4000`
+* **What it does:**
+  1. Checks and verifies Administrator elevation.
+  2. Builds the optimized frontend bundle (`frontend/dist`) if not already present.
+  3. Launches the backend Express server, which serves both the REST/WebSocket API and the production React dashboard from `http://127.0.0.1:4000`.
+  4. Automatically pins `/32` routes to physical adapters, displaying the green **`PATH VERIFIED`** badge.
 
