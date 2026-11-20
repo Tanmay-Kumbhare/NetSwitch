@@ -88,8 +88,10 @@ To run the entire system (compiled frontend + backend agent) in **a single Admin
 
 ```powershell
 cd "d:\TY (5th Sem)\CNT\CP\NetSwitch"
-.\scripts\start-admin.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-admin.ps1
 ```
+
+*(Note: `-ExecutionPolicy Bypass` ensures Windows allows executing the local startup script).*
 
 * **Dashboard URL:** `http://127.0.0.1:4000`
 * **What it does:**
